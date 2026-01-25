@@ -1,0 +1,14 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Chrome/Chromium
+.crx
+.pem
+
+# Development
+node_modules/
+.env
+*.log
+.vscode/
+.idea/

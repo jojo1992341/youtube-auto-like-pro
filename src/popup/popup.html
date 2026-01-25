@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoLike Pro</title>
+  <!-- Lien vers le style restauré -->
+  <link rel="stylesheet" href="../../assets/styles/popup.css">
+</head>
+
+<body>
+
+  <!-- ========== HEADER ========== -->
+  <header>
+    <h1>👍 AutoLike Pro</h1>
+    <div class="version">v5.2.0 (Legacy UI)</div>
+  </header>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main>
+
+    <!-- 1. CONFIGURATION -->
+    <section>
+      <div class="section-header">
+        <span>⚙️ Réglages</span>
+      </div>
+
+      <!-- Toggle activation -->
+      <div class="control-group">
+        <label for="enableCheck">Extension active</label>
+        <input type="checkbox" id="enableCheck">
+      </div>
+
+      <!-- Délai -->
+      <div class="control-group">
+        <label for="delayInput">Délai (secondes)</label>
+        <input type="number" id="delayInput" min="0" max="600">
+      </div>
+
+      <!-- Variation -->
+      <div class="control-group">
+        <label for="variationInput">Variation (%)</label>
+        <input type="number" id="variationInput" min="0" max="100">
+      </div>
+
+      <!-- Log Level -->
+      <div class="control-group">
+        <label for="logLevel">Niveau de logs</label>
+        <select id="logLevel">
+          <option value="ERROR">Erreurs</option>
+          <option value="WARN">Warnings</option>
+          <option value="INFO">Infos</option>
+          <option value="DEBUG">Debug</option>
+        </select>
+      </div>
+
+      <!-- NOUVEAU : Mode Sélection Manuelle -->
+      <div class="control-group" style="border-top: 1px dashed #eee; padding-top: 12px; margin-top: 12px;">
+        <label style="color: #d35400;">Problème de détection ?</label>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnDiagnostic" class="btn-secondary"
+            style="margin-top: 4px; border-color: #2980b9; color: #2980b9; flex: 1;">
+            🔎 Vérifier
+          </button>
+          <button id="btnSelectMode" class="btn-secondary"
+            style="margin-top: 4px; border-color: #d35400; color: #d35400; flex: 1;">
+            🎯 Réparer
+          </button>
+        </div>
+      </div>
+
+      <!-- Import / Export -->
+      <div class="control-group buttons-row">
+        <button id="exportBtn" class="btn-secondary">⬇️ Exporter</button>
+        <button id="importBtn" class="btn-secondary">⬆️ Importer</button>
+        <input type="file" id="importInput" accept=".json">
+      </div>
+
+      <!-- Action Principal -->
+      <button id="saveBtn">Sauvegarder les modifications</button>
+    </section>
+
+    <!-- 2. STATISTIQUES -->
+    <section>
+      <div class="section-header">
+        <span>📊 Statistiques</span>
+        <button id="resetStatsBtn" class="btn-icon" title="Réinitialiser">↻</button>
+      </div>
+
+      <!-- Grille -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div id="totalLikes" class="stat-value">-</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-box">
+          <div id="autoLikes" class="stat-value">-</div>
+          <div class="stat-label">Auto</div>
+        </div>
+        <div class="stat-box">
+          <div id="manualLikes" class="stat-value">-</div>
+          <div class="stat-label">Manuel</div>
+        </div>
+        <div class="stat-box">
+          <div id="skipped" class="stat-value">-</div>
+          <div class="stat-label">Ignorés</div>
+        </div>
+      </div>
+
+      <!-- Onglets -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">📈 Graphique</div>
+        <div class="tab" data-tab="history">🕐 Historique</div>
+      </div>
+
+      <!-- Contenus -->
+      <div id="tab-overview" class="tab-content active">
+        <div class="chart-wrapper">
+          <canvas id="likesChart"></canvas>
+        </div>
+      </div>
+
+      <div id="tab-history" class="tab-content">
+        <div id="historyContainer" class="list-container">
+          <!-- Rempli par JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. LISTES -->
+    <section>
+      <!-- Whitelist -->
+      <div class="section-header">
+        <span>⭐ Favoris <span id="whitelistCount" class="badge">0</span></span>
+        <button id="clearWhitelistBtn" class="btn-text">Vider</button>
+      </div>
+      <div id="whitelistContainer" class="list-container short"></div>
+
+      <div class="spacer"></div>
+
+      <!-- Blacklist -->
+      <div class="section-header">
+        <span>🚫 Bloqués <span id="blacklistCount" class="badge">0</span></span>
+        <button id="clearBlacklistBtn" class="btn-text">Vider</button>
+      </div>
+      <div id="blacklistContainer" class="list-container short"></div>
+    </section>
+
+  </main>
+
+  <!-- Status Toast -->
+  <div id="status"></div>
+
+  <!-- Scripts -->
+  <script src="../../libs/chart.min.js"></script>
+  <script src="popup.js" type="module"></script>
+</body>
+
+</html>

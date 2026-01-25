@@ -1,0 +1,316 @@
+import { StorageService } from '../services/StorageService.js';
+import { YouTubeDOMAdapter } from '../infrastructure/YouTubeDOMAdapter.js';
+import { OverlayManager } from '../ui/OverlayManager.js';
+import { SelectorPicker } from './SelectorPicker.js';
+import { DecisionEngine, DECISION } from '../core/DecisionEngine.js';
+import { MESSAGES } from '../core/Constants.js';
+import { logger } from '../infrastructure/logger.js';
+
+/**
+ * Utilitaire pour attendre (Promisified setTimeout)
+ */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * EXÉCUTEUR D'INTERACTIONS
+ * Responsabilité : Exécuter les actions concrètes sur le DOM et gérer l'interface utilisateur liée aux actions.
+ * Isole la complexité du "COMMENT" (cliquer, afficher toast, gérer le consentement).
+ */
+class InteractionExecutor {
+  constructor(adapter, overlay, storage) {
+    this.adapter = adapter;
+    this.overlay = overlay;
+    this.storage = storage;
+  }
+
+  async execute(decision, context) {
+    const { videoId, channelName, waitTime, config } = context;
+
+    switch (decision) {
+      case DECISION.LIKE:
+        await delay(waitTime);
+        if (context.checkCancel()) return; // Vérification anti-race condition
+        await this._attemptLike(videoId, channelName, config);
+        break;
+
+      case DECISION.SKIP:
+        await this.storage.incrementStat('skipped');
+        logger.info('Vidéo ignorée (Blacklist).');
+        break;
+
+      case DECISION.ASK_CONSENT:
+        await this._handleUserConsent(context);
+        break;
+
+      case DECISION.DO_NOTHING:
+      default:
+        break;
+    }
+  }
+
+  async _handleUserConsent(context) {
+    const { channelName, videoId, checkCancel } = context;
+    const { shouldLike, remember } = await this.overlay.askConsent(channelName);
+
+    if (checkCancel()) return;
+
+    if (shouldLike) {
+      if (remember) {
+        await this._updateList('whitelist', channelName);
+        this.overlay.showToast('Ajouté aux favoris ⭐', 'success');
+      }
+      await delay(500);
+      if (checkCancel()) return;
+      await this._attemptLike(videoId, channelName, context.config);
+    } else {
+      if (remember) {
+        await this._updateList('blacklist', channelName);
+        this.overlay.showToast('Chaîne bloquée et Dislikée 👎', 'warning');
+      }
+      await delay(500);
+      if (checkCancel()) return;
+      await this._attemptDislike(context.config);
+    }
+  }
+
+  async _attemptLike(videoId, channelName, config) {
+    const btn = this.adapter.getLikeButton(config.customSelectors?.likeButton);
+
+    if (!btn) {
+      logger.warn('Bouton Like introuvable.');
+      return;
+    }
+
+    if (this.adapter.isLiked(btn)) {
+      logger.info('Vidéo déjà likée.');
+      return;
+    }
+
+    try {
+      btn.click();
+      await Promise.all([
+        this.storage.incrementStat('auto'),
+        this.storage.addToHistory({
+          videoId,
+          channelName,
+          videoTitle: document.title.replace(' - YouTube', ''),
+          timestamp: Date.now(),
+          action: 'AUTO_LIKE'
+        })
+      ]);
+      this.overlay.showToast('J\'aime ajouté 👍', 'success');
+      logger.info('✅ Like effectué.');
+    } catch (error) {
+      logger.error('Erreur lors du clic', error);
+      this.overlay.showToast('Erreur technique', 'error');
+    }
+  }
+
+  async _attemptDislike(config) {
+    const btn = this.adapter.getDislikeButton(config.customSelectors?.dislikeButton);
+
+    if (!btn) {
+      logger.warn('Bouton Dislike introuvable.');
+      return;
+    }
+
+    if (this.adapter.isDisliked(btn)) {
+      logger.info('Vidéo déjà dislikée.');
+      return;
+    }
+
+    try {
+      btn.click();
+      await this.storage.incrementStat('skipped');
+      logger.info('✅ Dislike effectué.');
+    } catch (error) {
+      logger.error('Erreur lors du clic Dislike', error);
+    }
+  }
+
+  async _updateList(listType, name) {
+    const config = await this.storage.getConfig();
+    const list = config[listType] || [];
+    if (!list.includes(name)) {
+      await this.storage.updateConfig({
+        [listType]: [...list, name]
+      });
+    }
+  }
+}
+
+/**
+ * ORCHESTRATEUR DE CONTENU
+ * Responsabilité : Coordonner le cycle de vie et prendre des décisions.
+ * Ne manipule plus le DOM directement pour les actions.
+ */
+class ContentOrchestrator {
+  constructor({ adapter, overlay, picker, storage }) {
+    this.adapter = adapter;
+    this.overlay = overlay;
+    this.picker = picker;
+    this.storage = storage;
+
+    // Délégation de l'exécution
+    this.executor = new InteractionExecutor(adapter, overlay, storage);
+
+    this.currentContext = {
+      videoId: null,
+      isProcessing: false
+    };
+
+    this.handleVideoDetected = this.handleVideoDetected.bind(this);
+  }
+
+  async init() {
+    logger.info('🚀 Démarrage de AutoLike Pro...');
+    try {
+      await this.storage.init();
+      this.adapter.start(this.handleVideoDetected);
+      this._initMessageListeners();
+      logger.info('✅ Orchestrateur prêt.');
+    } catch (e) {
+      logger.error('❌ Échec critique au démarrage', e);
+      this.overlay.showToast('Erreur d\'initialisation', 'error');
+    }
+  }
+
+  async handleVideoDetected({ videoId }) {
+    logger.info(`🎬 Nouvelle vidéo détectée : ${videoId}`);
+    this.currentContext = { videoId, isProcessing: true };
+
+    try {
+      const config = await this.storage.getConfig();
+      if (!config.isEnabled) {
+        logger.debug('Extension désactivée via config.');
+        return;
+      }
+
+      // Onboarding simplifié
+      if (!this._hasRequiredSelectors(config)) {
+        await this._startOnboarding();
+        return;
+      }
+
+      await this._processVideoInteraction(videoId, config);
+
+    } catch (e) {
+      logger.error('Erreur durant le traitement vidéo', e);
+    } finally {
+      if (this.currentContext.videoId === videoId) {
+        this.currentContext.isProcessing = false;
+      }
+    }
+  }
+
+  _hasRequiredSelectors(config) {
+    return config.customSelectors?.likeButton &&
+      config.customSelectors?.dislikeButton &&
+      config.customSelectors?.channelName;
+  }
+
+  async _startOnboarding() {
+    logger.info('🆕 [Onboarding] Config incomplète. Lancement du tutoriel.');
+    await delay(1500);
+    this.overlay.showToast('🎯 Config requise : Cliquez sur J\'AIME, puis JE N\'AIME PAS', 'info', 5000);
+    this.picker.start();
+  }
+
+  async _processVideoInteraction(videoId, config) {
+    const channelName = await this.adapter.getChannelName(config.customSelectors?.channelName);
+
+    // Vérification de contexte stricte
+    if (this._hasContextChanged(videoId)) return;
+
+    if (!channelName) {
+      logger.warn('Nom de chaîne introuvable.');
+      return;
+    }
+
+    // Prise de décision
+    const engine = new DecisionEngine(config);
+    const decision = engine.decide(channelName);
+    const waitTime = engine.computeDelayMs();
+
+    logger.info(`🧠 Décision: ${decision} (attente: ${waitTime}ms)`);
+
+    // Délégation de l'exécution
+    await this.executor.execute(decision, {
+      videoId,
+      channelName,
+      waitTime,
+      config,
+      checkCancel: () => this._hasContextChanged(videoId) // Callback de sécurité
+    });
+  }
+
+  _hasContextChanged(videoId) {
+    return this.currentContext.videoId !== videoId;
+  }
+
+  _initMessageListeners() {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === MESSAGES.START_SELECTION_MODE) {
+        logger.info('Mode sélection activé via Popup.');
+        this.picker.start();
+        sendResponse({ status: 'started' });
+      }
+      if (message.type === MESSAGES.START_DIAGNOSTIC) {
+        logger.info('Diagnostic lancé via Popup.');
+        this._runDiagnostic();
+        sendResponse({ status: 'running' });
+      }
+      return false;
+    });
+  }
+
+  async _runDiagnostic() {
+    const config = await this.storage.getConfig();
+    const likeBtn = this.adapter.getLikeButton(config.customSelectors?.likeButton);
+    const dislikeBtn = this.adapter.getDislikeButton(config.customSelectors?.dislikeButton);
+    const channelEl = await this.adapter.getChannelElement(config.customSelectors?.channelName);
+
+    const missing = [];
+    if (!likeBtn) missing.push('J\'aime');
+    if (!dislikeBtn) missing.push('Je n\'aime pas');
+    if (!channelEl) missing.push('Chaîne');
+
+    if (missing.length === 0) {
+      this.overlay.showToast('✅ Configuration valide : Tout est détecté !', 'success');
+      await this.overlay.playDiagnosticAnimation([
+        { element: likeBtn },
+        { element: dislikeBtn },
+        { element: channelEl }
+      ]);
+    } else {
+      this.overlay.showToast(`⚠️ Éléments introuvables : ${missing.join(', ')}`, 'warning', 4000);
+      await delay(1500);
+      this.overlay.showToast('🔧 Lancement de la réparation...', 'info');
+      this.picker.start();
+    }
+  }
+}
+
+// Composition Root
+function bootstrap() {
+  const storage = new StorageService();
+  const adapter = new YouTubeDOMAdapter();
+  const overlay = new OverlayManager();
+  const picker = new SelectorPicker(overlay, storage);
+
+  const orchestrator = new ContentOrchestrator({
+    adapter,
+    overlay,
+    picker,
+    storage
+  });
+
+  orchestrator.init();
+
+  if (typeof window !== 'undefined') {
+    window.__autolikePro = orchestrator;
+    window.__autolikeStorage = storage;
+  }
+}
+
+bootstrap();
