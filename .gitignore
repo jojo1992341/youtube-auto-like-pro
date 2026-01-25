@@ -1,14 +1,15 @@
 # OS files
-.DS_Store
 Thumbs.db
+Desktop.ini
+.DS_Store
 
-# Chrome/Chromium
-.crx
-.pem
+# Chrome extension specific
+*.pem
+*.crx
 
-# Development
-node_modules/
-.env
-*.log
+# Developer tools
 .vscode/
 .idea/
+
+# Dependencies
+node_modules/
