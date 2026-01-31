@@ -64,7 +64,10 @@
 }
 
 .popup-card {
-  width: 380px;
+  width: 420px; /* Un peu plus large pour les suggestions */
+  max-height: 90vh; /* Sécurité pour petits écrans */
+  display: flex;
+  flex-direction: column;
   background: #1f1f1f;
   border: 1px solid #333;
   border-radius: 12px;
@@ -76,7 +79,7 @@
 }
 
 .popup-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
-.popup-text { margin: 0 0 20px; color: #aaa; font-size: 13px; line-height: 1.5; }
+.popup-text { margin: 0 0 16px; color: #aaa; font-size: 13px; line-height: 1.5; }
 .popup-channel { color: #fff; font-weight: 700; }
 
 .popup-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
@@ -86,7 +89,49 @@
 }
 .popup-checkbox { width: 16px; height: 16px; accent-color: #3ea6ff; }
 
-.popup-actions { display: flex; gap: 12px; }
+/* --- SUGGESTIONS IA (Nouveau) --- */
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-right: 4px; /* Espace pour la scrollbar */
+}
+
+/* Scrollbar custom pour Webkit (Chrome) */
+.suggestion-list::-webkit-scrollbar { width: 6px; }
+.suggestion-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+.suggestion-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+.suggestion-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+.suggestion-card {
+  background: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  color: #ddd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.suggestion-card:hover {
+  background: #333;
+  border-color: #444;
+}
+
+.suggestion-card.selected {
+  background: rgba(62, 166, 255, 0.1);
+  border-color: #3ea6ff;
+  color: #fff;
+  box-shadow: 0 0 0 1px #3ea6ff inset; /* Bordure intérieure pour éviter le layout shift */
+}
+
+/* --- ACTIONS --- */
+.popup-actions { display: flex; gap: 12px; margin-top: auto; }
 .btn {
   flex: 1; padding: 10px; border-radius: 18px; border: none; cursor: pointer;
   font-weight: 600; font-size: 14px; transition: filter 0.2s;

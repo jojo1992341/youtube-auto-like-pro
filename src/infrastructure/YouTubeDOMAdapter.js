@@ -47,6 +47,7 @@ class ElementCache {
 /**
  * ADAPTATEUR DOM YOUTUBE
  * Responsabilité unique : Fournir une interface normalisée pour accéder aux éléments du DOM YouTube.
+ * * Mise à jour v5.3 : Support de l'injection de commentaires.
  */
 export class YouTubeDOMAdapter {
   constructor(config = DEFAULT_DOM_CONFIG) {
@@ -105,6 +106,72 @@ export class YouTubeDOMAdapter {
 
   isDisliked(btn) {
     return this._isButtonPressed(btn);
+  }
+
+  // --- NOUVEAU : Méthodes de Gestion des Commentaires ---
+
+  /**
+   * Tente de préparer la zone de commentaire.
+   * Scrolle, clique sur le placeholder, et attend l'input.
+   */
+  async prepareCommentInput() {
+    // 1. Trouver le conteneur global des commentaires pour scroller
+    const commentsSection = document.querySelector('ytd-comments');
+    if (commentsSection) {
+      commentsSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // 2. Trouver et cliquer sur le placeholder "Ajouter un commentaire..."
+    // Note: On utilise des sélecteurs "hardcodés" ici car on n'a pas accès à DOMConfig.js dans cette phase
+    // Idealement, cela devrait être dans la config.
+    const placeholder = await this._waitForElement(['#placeholder-area'], 2000).catch(() => null);
+    
+    if (placeholder && this._isVisible(placeholder)) {
+      placeholder.click();
+    }
+
+    // 3. Attendre que l'éditeur réel apparaisse
+    const inputField = await this._waitForElement(['#contenteditable-root'], 2000).catch(() => null);
+    if (!inputField) {
+      throw new Error('Impossible d\'activer la zone de commentaire.');
+    }
+
+    return inputField;
+  }
+
+  /**
+   * Injecte le texte dans le champ de commentaire et simule la frappe.
+   * @param {HTMLElement} inputField 
+   * @param {string} text 
+   */
+  fillCommentInput(inputField, text) {
+    if (!inputField) return;
+
+    // Reset du contenu
+    inputField.innerText = text;
+    
+    // Crucial : Dispatcher l'événement 'input' pour que YouTube (Polymer) détecte le changement
+    // Sans ça, le bouton "Poster" reste grisé.
+    const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+    inputField.dispatchEvent(inputEvent);
+  }
+
+  /**
+   * Trouve et retourne le bouton de soumission (Poster).
+   */
+  async getSubmitCommentButton() {
+    // Le bouton est souvent dans un conteneur parent activé par l'input
+    // Selecteur standard YouTube Desktop
+    const selectors = ['#submit-button button', 'ytd-button-renderer#submit-button'];
+    
+    const btn = await this._waitForElement(selectors, 1000).catch(() => null);
+    
+    // Vérification supplémentaire : le bouton ne doit pas être désactivé
+    if (btn && btn.hasAttribute('disabled')) {
+      logger.warn('[DOM] Bouton Poster trouvé mais désactivé (input event raté ?).');
+    }
+    
+    return btn;
   }
 
   // --- Helpers Privés ---
@@ -177,7 +244,7 @@ export class YouTubeDOMAdapter {
 
       timer = setTimeout(() => {
         cleanup();
-        reject(new Error('Timeout'));
+        reject(new Error('Timeout searching element'));
       }, timeoutMs);
     });
   }

@@ -6,10 +6,8 @@ import { SelectionSystem } from './components/SelectionSystem.js';
 /**
  * MANAGER PRINCIPAL (Facade)
  * Point d'entrée unique pour l'application.
- * 
- * Refactoring v5.2 :
- * Utilise désormais la composition de modules UI distincts pour le ShadowDOM,
- * les Toasts, les Modales et la Sélection.
+ * * Refactoring v5.2 :
+ * Utilise désormais la composition de modules UI distincts.
  */
 export class OverlayManager {
   constructor() {
@@ -27,8 +25,21 @@ export class OverlayManager {
     this.toasts.show(message, type, duration);
   }
 
+  /**
+   * Demande le consentement pour l'action Like/Dislike
+   */
   askConsent(channelName) {
     return this.modals.askConsent(channelName);
+  }
+
+  /**
+   * NOUVEAU : Demande la validation d'un commentaire généré par IA
+   * @param {string} channelName 
+   * @param {string} generatedComment 
+   * @returns {Promise<{confirmed: boolean, finalComment: string}>}
+   */
+  askCommentValidation(channelName, generatedComment) {
+    return this.modals.askCommentValidation(channelName, generatedComment);
   }
 
   enableSelectionMode() {
@@ -47,10 +58,6 @@ export class OverlayManager {
     this.selection.highlight(rect);
   }
 
-  /**
-   * Joue la séquence d'animation pour le diagnostic.
-   * @param {Array<{element: HTMLElement}>} targets - Liste ordonnée des cibles (Like, Dislike, Channel)
-   */
   async playDiagnosticAnimation(targets) {
     const STEP_DURATION = 800; // ms
 
@@ -58,11 +65,9 @@ export class OverlayManager {
       if (target && target.element) {
         this.drawHighlight(target.element.getBoundingClientRect());
       }
-      // Pause bloquante pour l'effet visuel
       await new Promise(r => setTimeout(r, STEP_DURATION));
     }
 
-    // Nettoyage final
     this.drawHighlight(null);
   }
 

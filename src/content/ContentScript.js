@@ -13,8 +13,8 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * EXÉCUTEUR D'INTERACTIONS
- * Responsabilité : Exécuter les actions concrètes sur le DOM et gérer l'interface utilisateur liée aux actions.
- * Isole la complexité du "COMMENT" (cliquer, afficher toast, gérer le consentement).
+ * Responsabilité : Exécuter les actions concrètes sur le DOM.
+ * * Mise à jour v5.3 : Intégration du flux de commentaire IA.
  */
 class InteractionExecutor {
   constructor(adapter, overlay, storage) {
@@ -29,8 +29,15 @@ class InteractionExecutor {
     switch (decision) {
       case DECISION.LIKE:
         await delay(waitTime);
-        if (context.checkCancel()) return; // Vérification anti-race condition
-        await this._attemptLike(videoId, channelName, config);
+        if (context.checkCancel()) return;
+        
+        // 1. Action Like
+        const liked = await this._attemptLike(videoId, channelName, config);
+        
+        // 2. Flux Commentaire IA (Si Like réussi)
+        if (liked) {
+          await this._handleAICommentFlow(channelName, document.title, context.checkCancel);
+        }
         break;
 
       case DECISION.SKIP:
@@ -61,7 +68,13 @@ class InteractionExecutor {
       }
       await delay(500);
       if (checkCancel()) return;
-      await this._attemptLike(videoId, channelName, context.config);
+      
+      const liked = await this._attemptLike(videoId, channelName, context.config);
+      
+      // Flux IA après consentement manuel
+      if (liked) {
+        await this._handleAICommentFlow(channelName, document.title, checkCancel);
+      }
     } else {
       if (remember) {
         await this._updateList('blacklist', channelName);
@@ -73,17 +86,83 @@ class InteractionExecutor {
     }
   }
 
+  /**
+   * FLUX IA PRINCIPAL
+   * Orchestre la génération, la validation et le post.
+   */
+  async _handleAICommentFlow(channelName, rawTitle, checkCancel) {
+    // 1. Vérification Config
+    const aiConfig = await this.storage.getAIConfig();
+    if (!aiConfig.isEnabled) return;
+
+    // Petite pause pour laisser l'UI respirer après le toast de Like
+    await delay(1000);
+    if (checkCancel()) return;
+
+    this.overlay.showToast('🤖 L\'IA prépare 5 variantes...', 'info', 2000);
+
+    try {
+      // 2. Génération (via Background)
+      const videoTitle = rawTitle.replace(' - YouTube', '');
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGES.AI_GENERATE_REQUEST,
+        payload: { videoTitle, channelName }
+      });
+
+      if (checkCancel()) return;
+
+      if (!response || response.type === MESSAGES.AI_GENERATE_ERROR) {
+        throw new Error(response?.error || 'Erreur inconnue');
+      }
+
+      // NOUVEAU : On reçoit un tableau de suggestions
+      const suggestions = response.data;
+
+      // 3. Validation Humaine (Obligatoire avec sélection)
+      const { confirmed, finalComment } = await this.overlay.askCommentValidation(channelName, suggestions);
+
+      if (!confirmed || !finalComment) {
+        this.overlay.showToast('Commentaire annulé', 'info');
+        return;
+      }
+
+      if (checkCancel()) return;
+
+      // 4. Injection & Post
+      this.overlay.showToast('Préparation de la zone de commentaire...', 'info');
+      
+      const inputField = await this.adapter.prepareCommentInput();
+      this.adapter.fillCommentInput(inputField, finalComment);
+      
+      await delay(600); // Temps pour que l'UI YouTube réagisse à l'input
+      
+      const submitBtn = await this.adapter.getSubmitCommentButton();
+      
+      if (submitBtn) {
+        submitBtn.click();
+        this.overlay.showToast('Commentaire posté avec succès ! 🎉', 'success');
+        logger.info('✅ Commentaire IA posté.');
+      } else {
+        throw new Error('Bouton "Poster" introuvable ou inactif.');
+      }
+
+    } catch (error) {
+      logger.error('Flux IA échoué', error);
+      this.overlay.showToast(`Erreur IA: ${error.message}`, 'error');
+    }
+  }
+
   async _attemptLike(videoId, channelName, config) {
     const btn = this.adapter.getLikeButton(config.customSelectors?.likeButton);
 
     if (!btn) {
       logger.warn('Bouton Like introuvable.');
-      return;
+      return false;
     }
 
     if (this.adapter.isLiked(btn)) {
       logger.info('Vidéo déjà likée.');
-      return;
+      return true; // Considéré comme succès pour enchaîner l'IA
     }
 
     try {
@@ -100,24 +179,19 @@ class InteractionExecutor {
       ]);
       this.overlay.showToast('J\'aime ajouté 👍', 'success');
       logger.info('✅ Like effectué.');
+      return true;
     } catch (error) {
       logger.error('Erreur lors du clic', error);
       this.overlay.showToast('Erreur technique', 'error');
+      return false;
     }
   }
 
   async _attemptDislike(config) {
     const btn = this.adapter.getDislikeButton(config.customSelectors?.dislikeButton);
+    if (!btn) return;
 
-    if (!btn) {
-      logger.warn('Bouton Dislike introuvable.');
-      return;
-    }
-
-    if (this.adapter.isDisliked(btn)) {
-      logger.info('Vidéo déjà dislikée.');
-      return;
-    }
+    if (this.adapter.isDisliked(btn)) return;
 
     try {
       btn.click();
@@ -141,8 +215,7 @@ class InteractionExecutor {
 
 /**
  * ORCHESTRATEUR DE CONTENU
- * Responsabilité : Coordonner le cycle de vie et prendre des décisions.
- * Ne manipule plus le DOM directement pour les actions.
+ * Responsabilité : Coordonner le cycle de vie.
  */
 class ContentOrchestrator {
   constructor({ adapter, overlay, picker, storage }) {
@@ -151,7 +224,6 @@ class ContentOrchestrator {
     this.picker = picker;
     this.storage = storage;
 
-    // Délégation de l'exécution
     this.executor = new InteractionExecutor(adapter, overlay, storage);
 
     this.currentContext = {
@@ -163,7 +235,7 @@ class ContentOrchestrator {
   }
 
   async init() {
-    logger.info('🚀 Démarrage de AutoLike Pro...');
+    logger.info('🚀 Démarrage de AutoLike Pro (v5.3 AI)...');
     try {
       await this.storage.init();
       this.adapter.start(this.handleVideoDetected);
@@ -186,7 +258,6 @@ class ContentOrchestrator {
         return;
       }
 
-      // Onboarding simplifié
       if (!this._hasRequiredSelectors(config)) {
         await this._startOnboarding();
         return;
@@ -204,13 +275,14 @@ class ContentOrchestrator {
   }
 
   _hasRequiredSelectors(config) {
+    // Note: On ne vérifie pas les sélecteurs de commentaires ici car ils sont gérés dynamiquement dans l'adapter
     return config.customSelectors?.likeButton &&
       config.customSelectors?.dislikeButton &&
       config.customSelectors?.channelName;
   }
 
   async _startOnboarding() {
-    logger.info('🆕 [Onboarding] Config incomplète. Lancement du tutoriel.');
+    logger.info('🆕 [Onboarding] Config incomplète.');
     await delay(1500);
     this.overlay.showToast('🎯 Config requise : Cliquez sur J\'AIME, puis JE N\'AIME PAS', 'info', 5000);
     this.picker.start();
@@ -219,7 +291,6 @@ class ContentOrchestrator {
   async _processVideoInteraction(videoId, config) {
     const channelName = await this.adapter.getChannelName(config.customSelectors?.channelName);
 
-    // Vérification de contexte stricte
     if (this._hasContextChanged(videoId)) return;
 
     if (!channelName) {
@@ -227,20 +298,18 @@ class ContentOrchestrator {
       return;
     }
 
-    // Prise de décision
     const engine = new DecisionEngine(config);
     const decision = engine.decide(channelName);
     const waitTime = engine.computeDelayMs();
 
     logger.info(`🧠 Décision: ${decision} (attente: ${waitTime}ms)`);
 
-    // Délégation de l'exécution
     await this.executor.execute(decision, {
       videoId,
       channelName,
       waitTime,
       config,
-      checkCancel: () => this._hasContextChanged(videoId) // Callback de sécurité
+      checkCancel: () => this._hasContextChanged(videoId)
     });
   }
 
@@ -251,12 +320,10 @@ class ContentOrchestrator {
   _initMessageListeners() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === MESSAGES.START_SELECTION_MODE) {
-        logger.info('Mode sélection activé via Popup.');
         this.picker.start();
         sendResponse({ status: 'started' });
       }
       if (message.type === MESSAGES.START_DIAGNOSTIC) {
-        logger.info('Diagnostic lancé via Popup.');
         this._runDiagnostic();
         sendResponse({ status: 'running' });
       }
@@ -276,16 +343,15 @@ class ContentOrchestrator {
     if (!channelEl) missing.push('Chaîne');
 
     if (missing.length === 0) {
-      this.overlay.showToast('✅ Configuration valide : Tout est détecté !', 'success');
+      this.overlay.showToast('✅ Configuration valide !', 'success');
       await this.overlay.playDiagnosticAnimation([
         { element: likeBtn },
         { element: dislikeBtn },
         { element: channelEl }
       ]);
     } else {
-      this.overlay.showToast(`⚠️ Éléments introuvables : ${missing.join(', ')}`, 'warning', 4000);
+      this.overlay.showToast(`⚠️ Manquant : ${missing.join(', ')}`, 'warning', 4000);
       await delay(1500);
-      this.overlay.showToast('🔧 Lancement de la réparation...', 'info');
       this.picker.start();
     }
   }

@@ -4,18 +4,23 @@ import { LIMITS, DEFAULTS, MESSAGES } from '../core/Constants.js';
 /**
  * VUE (VIEW)
  * Responsable uniquement de l'affichage et de la manipulation du DOM.
- * Ne contient AUCUNE logique métier.
  */
 class PopupView {
   constructor() {
     // Cache DOM Elements
     this.dom = {
       inputs: {
+        // Config Cœur
         enable: document.getElementById('enableCheck'),
         delay: document.getElementById('delayInput'),
         variation: document.getElementById('variationInput'),
         logLevel: document.getElementById('logLevel'),
-        file: document.getElementById('importInput')
+        file: document.getElementById('importInput'),
+        // Config IA (Nouveau)
+        aiEnable: document.getElementById('aiEnableCheck'),
+        aiApiKey: document.getElementById('aiApiKey'),
+        aiModel: document.getElementById('aiModel'),
+        aiPrompt: document.getElementById('aiPrompt')
       },
       buttons: {
         save: document.getElementById('saveBtn'),
@@ -44,6 +49,7 @@ class PopupView {
         blacklist: document.getElementById('blacklistCount')
       },
       status: document.getElementById('status'),
+      // Sélection de tous les onglets
       tabs: document.querySelectorAll('.tab'),
       tabContents: document.querySelectorAll('.tab-content')
     };
@@ -54,19 +60,36 @@ class PopupView {
 
   // --- RENDU CONFIGURATION ---
 
-  setConfigValues(config) {
+  setConfigValues(config, aiConfig) {
+    // Config Générale
     this.dom.inputs.enable.checked = config.isEnabled;
     this.dom.inputs.delay.value = config.baseDelay;
     this.dom.inputs.variation.value = config.variationPercent;
     if (config.logLevel) this.dom.inputs.logLevel.value = config.logLevel;
+
+    // Config IA
+    if (aiConfig) {
+      this.dom.inputs.aiEnable.checked = aiConfig.isEnabled;
+      this.dom.inputs.aiApiKey.value = aiConfig.apiKey || ''; // On affiche la clé (masquée par input type=password)
+      this.dom.inputs.aiModel.value = aiConfig.model || '';
+      this.dom.inputs.aiPrompt.value = aiConfig.systemPrompt || '';
+    }
   }
 
   getFormValues() {
     return {
-      isEnabled: this.dom.inputs.enable.checked,
-      baseDelay: parseInt(this.dom.inputs.delay.value, 10),
-      variationPercent: parseInt(this.dom.inputs.variation.value, 10),
-      logLevel: this.dom.inputs.logLevel.value
+      config: {
+        isEnabled: this.dom.inputs.enable.checked,
+        baseDelay: parseInt(this.dom.inputs.delay.value, 10),
+        variationPercent: parseInt(this.dom.inputs.variation.value, 10),
+        logLevel: this.dom.inputs.logLevel.value
+      },
+      aiConfig: {
+        isEnabled: this.dom.inputs.aiEnable.checked,
+        apiKey: this.dom.inputs.aiApiKey.value.trim(),
+        model: this.dom.inputs.aiModel.value.trim(),
+        systemPrompt: this.dom.inputs.aiPrompt.value.trim()
+      }
     };
   }
 
@@ -156,7 +179,6 @@ class PopupView {
       const item = document.createElement('div');
       item.className = 'history-item';
 
-      // Sécurisation basique contre XSS via textContent
       const title = document.createElement('div');
       title.className = 'history-item-title';
       title.textContent = entry.videoTitle || 'Vidéo inconnue';
@@ -189,15 +211,37 @@ class PopupView {
     this._statusTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
   }
 
-  setActiveTab(tabName) {
-    this.dom.tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
-    this.dom.tabContents.forEach(c => c.classList.toggle('active', c.id === `tab-${tabName}`));
+  /**
+   * Gestion intelligente des onglets.
+   * Sépare les groupes "Settings" (General/AI) des groupes "Stats" (Overview/History).
+   */
+  setActiveTab(clickedTab) {
+    const tabName = clickedTab.dataset.tab;
+    const isSettingsGroup = ['general', 'ai'].includes(tabName);
+    
+    const groupTabs = isSettingsGroup 
+      ? ['general', 'ai'] 
+      : ['overview', 'history'];
+
+    // 1. Mise à jour des boutons (Classes active)
+    this.dom.tabs.forEach(t => {
+      if (groupTabs.includes(t.dataset.tab)) {
+        t.classList.toggle('active', t.dataset.tab === tabName);
+      }
+    });
+
+    // 2. Mise à jour du contenu
+    groupTabs.forEach(name => {
+      const content = document.getElementById(`tab-${name}`);
+      if (content) {
+        content.classList.toggle('active', name === tabName);
+      }
+    });
   }
 }
 
 /**
  * CONTRÔLEUR (CONTROLLER)
- * Orchestre la logique et détient l'instance de Service.
  */
 class PopupController {
   constructor() {
@@ -211,7 +255,6 @@ class PopupController {
       await this.storage.init();
       await this.refreshAll();
 
-      // Écoute des changements externes (ex: background update)
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local') this.refreshAll();
       });
@@ -222,13 +265,14 @@ class PopupController {
   }
 
   async refreshAll() {
-    const [config, stats, history] = await Promise.all([
+    const [config, aiConfig, stats, history] = await Promise.all([
       this.storage.getConfig(),
+      this.storage.getAIConfig(), // Nouveau
       this.storage.getStats(),
       this.storage.getHistory()
     ]);
 
-    this.view.setConfigValues(config);
+    this.view.setConfigValues(config, aiConfig);
     this.view.updateStats(stats);
     this.view.renderHistory(history);
     this.view.renderList('whitelist', config.whitelist, (n) => this._removeItem('whitelist', n));
@@ -236,7 +280,6 @@ class PopupController {
   }
 
   _bindEvents() {
-    // ... (bindEvents unchanged logic, referencing this._handleXXX)
     const btns = this.view.dom.buttons;
     const inputs = this.view.dom.inputs;
 
@@ -248,13 +291,12 @@ class PopupController {
     btns.selectMode.onclick = () => this._handleSelectMode();
     btns.diagnostic.onclick = () => this._handleDiagnostic();
 
-    // Import (Trick du file input caché)
     btns.import.onclick = () => inputs.file.click();
     inputs.file.onchange = (e) => this._handleImport(e);
 
-    // Onglets
+    // Gestion unifiée des onglets
     this.view.dom.tabs.forEach(tab => {
-      tab.onclick = (e) => this.view.setActiveTab(e.target.dataset.tab);
+      tab.onclick = (e) => this.view.setActiveTab(e.target);
     });
   }
 
@@ -263,36 +305,47 @@ class PopupController {
   async _handleSave() {
     try {
       const form = this.view.getFormValues();
+      const { config, aiConfig } = form;
 
-      // Validation
-      let delay = form.baseDelay;
-      let variation = form.variationPercent;
+      // Validation Config Cœur
+      let delay = config.baseDelay;
+      let variation = config.variationPercent;
 
       if (isNaN(delay)) delay = DEFAULTS.CONFIG.baseDelay;
       if (isNaN(variation)) variation = DEFAULTS.CONFIG.variationPercent;
 
-      // Clamping strict
       delay = Math.max(LIMITS.DELAY.MIN, Math.min(delay, LIMITS.DELAY.MAX));
       variation = Math.max(LIMITS.VARIATION.MIN, Math.min(variation, LIMITS.VARIATION.MAX));
 
-      // Sauvegarde
+      // Sauvegarde Config Cœur
       await this.storage.updateConfig({
-        isEnabled: form.isEnabled,
+        isEnabled: config.isEnabled,
         baseDelay: delay,
         variationPercent: variation,
-        logLevel: form.logLevel
+        logLevel: config.logLevel
       });
 
-      // Update UI immédiat pour refléter les valeurs clampées
+      // Sauvegarde Config IA (Nouveau)
+      await this.storage.updateAIConfig({
+        isEnabled: aiConfig.isEnabled,
+        apiKey: aiConfig.apiKey,
+        model: aiConfig.model || DEFAULTS.AI_CONFIG.model,
+        systemPrompt: aiConfig.systemPrompt || DEFAULTS.AI_CONFIG.systemPrompt
+      });
+
+      // Refresh UI pour clamp values
       this.view.dom.inputs.delay.value = delay;
       this.view.dom.inputs.variation.value = variation;
 
       this.view.showStatus('Configuration sauvegardée', 'success');
     } catch (error) {
+      console.error(error);
       this.view.showStatus('Erreur sauvegarde', 'error');
     }
   }
 
+  // ... (Méthodes _handleResetStats, _removeItem, _handleClearList inchangées, on garde le code existant mais non répété pour brièveté si elles sont identiques à la V5.2. Je les réinclus pour être complet)
+  
   async _handleResetStats() {
     if (!confirm('Réinitialiser les statistiques à zéro ?')) return;
     await this.storage.resetStats();
@@ -317,15 +370,13 @@ class PopupController {
 
   async _handleSelectMode() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     if (!tab || !tab.url.includes('youtube.com')) {
       this.view.showStatus('Allez sur YouTube d\'abord', 'warning');
       return;
     }
-
     try {
       await chrome.tabs.sendMessage(tab.id, { type: MESSAGES.START_SELECTION_MODE });
-      window.close(); // Ferme la popup pour laisser l'user agir
+      window.close();
     } catch (e) {
       this.view.showStatus('Erreur communication page', 'error');
     }
@@ -333,15 +384,11 @@ class PopupController {
 
   async _handleDiagnostic() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     if (!tab || !tab.url.includes('youtube.com')) {
       this.view.showStatus('Allez sur YouTube d\'abord', 'warning');
       return;
     }
-
     try {
-      // On envoie le message de diagnostic
-      // Note: On ne ferme pas la popup tout de suite, on attend un retour ou on laisse l'user voir le toast
       await chrome.tabs.sendMessage(tab.id, { type: MESSAGES.START_DIAGNOSTIC });
       window.close();
     } catch (e) {
@@ -349,13 +396,12 @@ class PopupController {
     }
   }
 
-  // --- IMPORT / EXPORT ---
-
   async _handleExport() {
     try {
       const data = {
-        meta: { version: '5.2.0', exportedAt: new Date().toISOString() },
+        meta: { version: '5.3.0', exportedAt: new Date().toISOString() },
         config: await this.storage.getConfig(),
+        aiConfig: await this.storage.getAIConfig(), // Inclusion de l'IA dans l'export
         stats: await this.storage.getStats()
       };
 
@@ -381,13 +427,11 @@ class PopupController {
       const text = await file.text();
       const json = JSON.parse(text);
 
-      if (!json.config || !Array.isArray(json.config.whitelist)) {
-        throw new Error('Format invalide');
-      }
+      if (!json.config) throw new Error('Format invalide');
 
       const current = await this.storage.getConfig();
+      const currentAI = await this.storage.getAIConfig();
 
-      // Fusion sécurisée
       const merged = {
         ...current,
         ...json.config,
@@ -397,8 +441,15 @@ class PopupController {
       };
 
       await this.storage.updateConfig(merged);
+
+      // Import IA si présent
+      if (json.aiConfig) {
+        const mergedAI = { ...currentAI, ...json.aiConfig };
+        await this.storage.updateAIConfig(mergedAI);
+      }
+
       this.view.showStatus('Import réussi', 'success');
-      event.target.value = ''; // Reset input
+      event.target.value = '';
     } catch (e) {
       console.error(e);
       this.view.showStatus('Fichier invalide', 'error');
