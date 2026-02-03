@@ -36,7 +36,8 @@ class InteractionExecutor {
         
         // 2. Flux Commentaire IA (Si Like réussi)
         if (liked) {
-          await this._handleAICommentFlow(channelName, document.title, context.checkCancel);
+          // Injection de la config pour accéder aux sélecteurs personnalisés
+          await this._handleAICommentFlow(channelName, document.title, context.checkCancel, config);
         }
         break;
 
@@ -56,7 +57,7 @@ class InteractionExecutor {
   }
 
   async _handleUserConsent(context) {
-    const { channelName, videoId, checkCancel } = context;
+    const { channelName, videoId, checkCancel, config } = context;
     const { shouldLike, remember } = await this.overlay.askConsent(channelName);
 
     if (checkCancel()) return;
@@ -73,7 +74,7 @@ class InteractionExecutor {
       
       // Flux IA après consentement manuel
       if (liked) {
-        await this._handleAICommentFlow(channelName, document.title, checkCancel);
+        await this._handleAICommentFlow(channelName, document.title, checkCancel, config);
       }
     } else {
       if (remember) {
@@ -89,9 +90,13 @@ class InteractionExecutor {
   /**
    * FLUX IA PRINCIPAL
    * Orchestre la génération, la validation et le post.
+   * @param {string} channelName
+   * @param {string} rawTitle
+   * @param {Function} checkCancel
+   * @param {Object} config - Config complète (incluant customSelectors)
    */
-  async _handleAICommentFlow(channelName, rawTitle, checkCancel) {
-    // 1. Vérification Config
+  async _handleAICommentFlow(channelName, rawTitle, checkCancel, config) {
+    // 1. Vérification Config IA
     const aiConfig = await this.storage.getAIConfig();
     if (!aiConfig.isEnabled) return;
 
@@ -115,7 +120,7 @@ class InteractionExecutor {
         throw new Error(response?.error || 'Erreur inconnue');
       }
 
-      // NOUVEAU : On reçoit un tableau de suggestions
+      // On reçoit un tableau de suggestions
       const suggestions = response.data;
 
       // 3. Validation Humaine (Obligatoire avec sélection)
@@ -131,12 +136,19 @@ class InteractionExecutor {
       // 4. Injection & Post
       this.overlay.showToast('Préparation de la zone de commentaire...', 'info');
       
-      const inputField = await this.adapter.prepareCommentInput();
+      // Extraction des sélecteurs personnalisés pour les commentaires
+      const cs = config.customSelectors || {};
+
+      const inputField = await this.adapter.prepareCommentInput({
+        placeholder: cs.commentPlaceholder,
+        input: cs.commentInput
+      });
+
       this.adapter.fillCommentInput(inputField, finalComment);
       
       await delay(600); // Temps pour que l'UI YouTube réagisse à l'input
       
-      const submitBtn = await this.adapter.getSubmitCommentButton();
+      const submitBtn = await this.adapter.getSubmitCommentButton(cs.commentSubmitButton);
       
       if (submitBtn) {
         submitBtn.click();

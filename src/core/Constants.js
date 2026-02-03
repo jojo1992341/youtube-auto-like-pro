@@ -37,7 +37,12 @@ export const DEFAULTS = Object.freeze({
     // Nouveaux champs pour stocker les sélecteurs manuels de l'utilisateur
     customSelectors: {
       likeButton: null,
-      channelName: null
+      dislikeButton: null, // Ajout explicite pour cohérence
+      channelName: null,
+      // NOUVEAU : Sélecteurs pour le flux de commentaires
+      commentPlaceholder: null,
+      commentInput: null,
+      commentSubmitButton: null
     }
   },
   // Configuration par défaut pour le module IA
@@ -46,7 +51,7 @@ export const DEFAULTS = Object.freeze({
     provider: 'openrouter',
     apiKey: '', // L'utilisateur DOIT fournir sa clé
     // Modèle gratuit performant par défaut sur OpenRouter
-    model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+    model: 'google/gemma-3-27b-it:free',
     // Prompt système par défaut : concis, positif, engageant
     systemPrompt: 'Tu es un viewer abonné à cette chaîne. Rédige un commentaire court (max 2 phrases), positif, constructif et pertinent par rapport au titre de la vidéo. Reste naturel, pas de hashtag abusif.',
     temperature: 0.7,
