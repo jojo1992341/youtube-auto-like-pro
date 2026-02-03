@@ -37,7 +37,10 @@ export const DEFAULTS = Object.freeze({
     // Nouveaux champs pour stocker les sélecteurs manuels de l'utilisateur
     customSelectors: {
       likeButton: null,
-      channelName: null
+      channelName: null,
+      commentPlaceholder: null,
+      commentInput: null,
+      commentSubmit: null
     }
   },
   // Configuration par défaut pour le module IA
