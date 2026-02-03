@@ -131,12 +131,17 @@ class InteractionExecutor {
       // 4. Injection & Post
       this.overlay.showToast('Préparation de la zone de commentaire...', 'info');
       
-      const inputField = await this.adapter.prepareCommentInput();
+      const inputField = await this.adapter.prepareCommentInput(
+        context.config.customSelectors?.commentPlaceholder,
+        context.config.customSelectors?.commentInput
+      );
       this.adapter.fillCommentInput(inputField, finalComment);
       
       await delay(600); // Temps pour que l'UI YouTube réagisse à l'input
       
-      const submitBtn = await this.adapter.getSubmitCommentButton();
+      const submitBtn = await this.adapter.getSubmitCommentButton(
+        context.config.customSelectors?.commentSubmit
+      );
       
       if (submitBtn) {
         submitBtn.click();
@@ -284,7 +289,7 @@ class ContentOrchestrator {
   async _startOnboarding() {
     logger.info('🆕 [Onboarding] Config incomplète.');
     await delay(1500);
-    this.overlay.showToast('🎯 Config requise : Cliquez sur J\'AIME, puis JE N\'AIME PAS', 'info', 5000);
+    this.overlay.showToast('🎯 Config requise : cliquez sur J\'AIME, JE N\'AIME PAS, la chaîne et les zones de commentaire', 'info', 6000);
     this.picker.start();
   }
 

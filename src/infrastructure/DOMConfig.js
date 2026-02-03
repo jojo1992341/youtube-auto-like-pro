@@ -16,6 +16,9 @@ export const DEFAULT_DOM_CONFIG = Object.freeze({
         TITLE: 'title',                   // Gardé car standard HTML
         LIKE_BUTTONS: [],
         DISLIKE_BUTTONS: [],
-        CHANNEL_NAME: []
+        CHANNEL_NAME: [],
+        COMMENT_PLACEHOLDER: ['#placeholder-area', 'ytd-comment-simplebox-renderer #placeholder-area'],
+        COMMENT_INPUT: ['#contenteditable-root', 'ytd-commentbox #contenteditable-root'],
+        COMMENT_SUBMIT: ['#submit-button button', 'ytd-button-renderer#submit-button']
     }
 });

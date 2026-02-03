@@ -114,7 +114,7 @@ export class YouTubeDOMAdapter {
    * Tente de préparer la zone de commentaire.
    * Scrolle, clique sur le placeholder, et attend l'input.
    */
-  async prepareCommentInput() {
+  async prepareCommentInput(customPlaceholderSelector = null, customInputSelector = null) {
     // 1. Trouver le conteneur global des commentaires pour scroller
     const commentsSection = document.querySelector('ytd-comments');
     if (commentsSection) {
@@ -122,16 +122,22 @@ export class YouTubeDOMAdapter {
     }
 
     // 2. Trouver et cliquer sur le placeholder "Ajouter un commentaire..."
-    // Note: On utilise des sélecteurs "hardcodés" ici car on n'a pas accès à DOMConfig.js dans cette phase
-    // Idealement, cela devrait être dans la config.
-    const placeholder = await this._waitForElement(['#placeholder-area'], 2000).catch(() => null);
+    const placeholderSelectors = this._mergeSelectors(
+      customPlaceholderSelector,
+      this.config.SELECTORS.COMMENT_PLACEHOLDER
+    );
+    const placeholder = await this._waitForElement(placeholderSelectors, 2000).catch(() => null);
     
     if (placeholder && this._isVisible(placeholder)) {
       placeholder.click();
     }
 
     // 3. Attendre que l'éditeur réel apparaisse
-    const inputField = await this._waitForElement(['#contenteditable-root'], 2000).catch(() => null);
+    const inputSelectors = this._mergeSelectors(
+      customInputSelector,
+      this.config.SELECTORS.COMMENT_INPUT
+    );
+    const inputField = await this._waitForElement(inputSelectors, 2000).catch(() => null);
     if (!inputField) {
       throw new Error('Impossible d\'activer la zone de commentaire.');
     }
@@ -159,10 +165,13 @@ export class YouTubeDOMAdapter {
   /**
    * Trouve et retourne le bouton de soumission (Poster).
    */
-  async getSubmitCommentButton() {
+  async getSubmitCommentButton(customSubmitSelector = null) {
     // Le bouton est souvent dans un conteneur parent activé par l'input
     // Selecteur standard YouTube Desktop
-    const selectors = ['#submit-button button', 'ytd-button-renderer#submit-button'];
+    const selectors = this._mergeSelectors(
+      customSubmitSelector,
+      this.config.SELECTORS.COMMENT_SUBMIT
+    );
     
     const btn = await this._waitForElement(selectors, 1000).catch(() => null);
     

@@ -16,12 +16,15 @@ export class SelectorPicker {
     this.generator = new SelectorGenerator(); // Composition forte
 
     this.isActive = false;
-    this.currentStep = null; // 'LIKE' | 'CHANNEL'
+    this.currentStep = null; // 'LIKE' | 'DISLIKE' | 'CHANNEL' | 'COMMENT_PLACEHOLDER' | 'COMMENT_INPUT' | 'COMMENT_SUBMIT'
 
     this.results = {
       likeButton: null,
       dislikeButton: null,
-      channelName: null
+      channelName: null,
+      commentPlaceholder: null,
+      commentInput: null,
+      commentSubmit: null
     };
 
     // Bindings
@@ -38,11 +41,18 @@ export class SelectorPicker {
 
     this.isActive = true;
     this.currentStep = 'LIKE';
-    this.results = { likeButton: null, dislikeButton: null, channelName: null };
+    this.results = {
+      likeButton: null,
+      dislikeButton: null,
+      channelName: null,
+      commentPlaceholder: null,
+      commentInput: null,
+      commentSubmit: null
+    };
 
     // Activation UI
     this.overlay.enableSelectionMode();
-    this.overlay.updateSelectionInstruction('ÉTAPE 1/3 : Cliquez sur le bouton J\'AIME 👍');
+    this.overlay.updateSelectionInstruction('ÉTAPE 1/6 : Cliquez sur le bouton J\'AIME 👍');
 
     // Ajout des écouteurs en mode CAPTURE (true)
     document.addEventListener('mousemove', this._handleMouseMove, true);
@@ -110,25 +120,52 @@ export class SelectorPicker {
       this._handleStepDislike(selector);
     } else if (this.currentStep === 'CHANNEL') {
       await this._handleStepChannel(selector);
+    } else if (this.currentStep === 'COMMENT_PLACEHOLDER') {
+      this._handleStepCommentPlaceholder(selector);
+    } else if (this.currentStep === 'COMMENT_INPUT') {
+      this._handleStepCommentInput(selector);
+    } else if (this.currentStep === 'COMMENT_SUBMIT') {
+      await this._handleStepCommentSubmit(selector);
     }
   }
 
   _handleStepLike(selector) {
     this.results.likeButton = selector;
     this.currentStep = 'DISLIKE';
-    this.overlay.updateSelectionInstruction('ÉTAPE 2/3 : Cliquez sur le bouton JE N\'AIME PAS 👎');
+    this.overlay.updateSelectionInstruction('ÉTAPE 2/6 : Cliquez sur le bouton JE N\'AIME PAS 👎');
     this.overlay.showToast('Bouton Like capturé !', 'info', 1000);
   }
 
   _handleStepDislike(selector) {
     this.results.dislikeButton = selector;
     this.currentStep = 'CHANNEL';
-    this.overlay.updateSelectionInstruction('ÉTAPE 3/3 : Cliquez sur le NOM DE LA CHAÎNE 📺');
+    this.overlay.updateSelectionInstruction('ÉTAPE 3/6 : Cliquez sur le NOM DE LA CHAÎNE 📺');
     this.overlay.showToast('Bouton Dislike capturé !', 'info', 1000);
   }
 
   async _handleStepChannel(selector) {
     this.results.channelName = selector;
+    this.currentStep = 'COMMENT_PLACEHOLDER';
+    this.overlay.updateSelectionInstruction('ÉTAPE 4/6 : Cliquez sur "Ajouter un commentaire" 💬');
+    this.overlay.showToast('Nom de chaîne capturé !', 'info', 1000);
+  }
+
+  _handleStepCommentPlaceholder(selector) {
+    this.results.commentPlaceholder = selector;
+    this.currentStep = 'COMMENT_INPUT';
+    this.overlay.updateSelectionInstruction('ÉTAPE 5/6 : Cliquez dans la zone de saisie du commentaire ✍️');
+    this.overlay.showToast('Placeholder commentaire capturé !', 'info', 1000);
+  }
+
+  _handleStepCommentInput(selector) {
+    this.results.commentInput = selector;
+    this.currentStep = 'COMMENT_SUBMIT';
+    this.overlay.updateSelectionInstruction('ÉTAPE 6/6 : Cliquez sur le bouton "Poster" 🚀');
+    this.overlay.showToast('Zone de saisie capturée !', 'info', 1000);
+  }
+
+  async _handleStepCommentSubmit(selector) {
+    this.results.commentSubmit = selector;
     try {
       await this.storage.saveCustomSelectors(this.results);
       this.overlay.showToast('Configuration sauvegardée ! Rafraîchissez la page.', 'success');
