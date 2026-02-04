@@ -8,7 +8,8 @@
   ],
   "host_permissions": [
     "*://www.youtube.com/*",
-    "https://openrouter.ai/*"
+    "https://openrouter.ai/*",
+    "https://api.groq.com/*"
   ],
   "action": {
     "default_popup": "src/popup/popup.html",

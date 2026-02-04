@@ -76,20 +76,42 @@
 
         <div class="spacer"></div>
 
-        <div style="background: var(--bg-elevated); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-          <label for="aiApiKey" style="display:block; margin-bottom:4px; font-weight:600;">Clé API OpenRouter</label>
-          <input type="password" id="aiApiKey" placeholder="sk-or-..." style="width:100%; text-align:left; font-family:monospace; margin-bottom: 4px;">
-          <div style="text-align:right;">
-            <a href="https://openrouter.ai/keys" target="_blank" style="font-size:11px; color:var(--info); text-decoration:none;">Obtenir une clé gratuite ↗</a>
+        <div class="control-group">
+          <label for="aiProvider">Fournisseur IA</label>
+          <select id="aiProvider" class="provider-select">
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+          </select>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div id="openrouterKeyBlock" class="key-block">
+          <label for="openrouterApiKey">Clé API OpenRouter</label>
+          <input type="password" id="openrouterApiKey" placeholder="sk-or-..." class="key-input">
+          <div class="key-link">
+            <a href="https://openrouter.ai/keys" target="_blank">Obtenir une clé gratuite ↗</a>
+          </div>
+        </div>
+
+        <div id="groqKeyBlock" class="key-block">
+          <label for="groqApiKey">Clé API Groq</label>
+          <input type="password" id="groqApiKey" placeholder="gsk_..." class="key-input">
+          <div class="key-link">
+            <a href="https://console.groq.com/keys" target="_blank">Créer une clé Groq ↗</a>
           </div>
         </div>
 
         <div class="spacer"></div>
 
         <div class="control-group">
-          <label for="aiModel">Modèle (ID)</label>
-          <input type="text" id="aiModel" placeholder="google/gemini-..." style="width:180px; text-align:left; font-size:11px;">
+          <label for="aiModelSelect">Modèles</label>
+          <div class="model-row">
+            <select id="aiModelSelect"></select>
+            <button id="refreshModelsBtn" class="btn-secondary btn-compact" type="button">↻ Actualiser</button>
+          </div>
         </div>
+        <p id="aiModelStatus" class="helper-text"></p>
 
         <div class="spacer"></div>
 

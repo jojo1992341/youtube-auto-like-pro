@@ -1,6 +1,7 @@
 import { STORAGE_KEYS, DEFAULTS, MESSAGES } from '../core/Constants.js';
 import { StorageService } from '../services/StorageService.js';
 import { OpenRouterService } from '../services/OpenRouterService.js';
+import { GroqService } from '../services/GroqService.js';
 
 /**
  * BACKGROUND CONTROLLER
@@ -11,6 +12,7 @@ class BackgroundController {
   constructor() {
     this.storage = new StorageService();
     this.aiService = new OpenRouterService();
+    this.groqService = new GroqService();
     
     // Initialisation immédiate
     this.storage.init().catch(console.error);
@@ -59,13 +61,22 @@ class BackgroundController {
       if (!aiConfig.isEnabled) {
         throw new Error('Le module IA est désactivé dans les réglages.');
       }
-      if (!aiConfig.apiKey) {
-        throw new Error('Clé API manquante. Veuillez configurer OpenRouter.');
+      const provider = aiConfig.provider || 'openrouter';
+      const openrouterKey = aiConfig.openrouterApiKey || aiConfig.apiKey;
+      const groqKey = aiConfig.groqApiKey;
+
+      if (provider === 'openrouter' && !openrouterKey) {
+        throw new Error('Clé API OpenRouter manquante. Veuillez configurer OpenRouter.');
+      }
+      if (provider === 'groq' && !groqKey) {
+        throw new Error('Clé API Groq manquante. Veuillez configurer Groq.');
       }
 
-      // 3. Appel au Service
-      const comment = await this.aiService.generateComment({
-        apiKey: aiConfig.apiKey,
+      const service = provider === 'groq' ? this.groqService : this.aiService;
+      const apiKey = provider === 'groq' ? groqKey : openrouterKey;
+
+      const comment = await service.generateComment({
+        apiKey,
         model: aiConfig.model,
         systemPrompt: aiConfig.systemPrompt,
         videoTitle: payload.videoTitle,
