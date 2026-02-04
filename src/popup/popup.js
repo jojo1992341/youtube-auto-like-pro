@@ -1,5 +1,6 @@
 import { StorageService } from '../services/StorageService.js';
 import { LIMITS, DEFAULTS, MESSAGES } from '../core/Constants.js';
+import { OpenRouterModelsService } from '../services/OpenRouterModelsService.js';
 
 /**
  * VUE (VIEW)
@@ -19,7 +20,7 @@ class PopupView {
         // Config IA (Nouveau)
         aiEnable: document.getElementById('aiEnableCheck'),
         aiApiKey: document.getElementById('aiApiKey'),
-        aiModel: document.getElementById('aiModel'),
+        aiModel: document.getElementById('aiModelSelect'),
         aiPrompt: document.getElementById('aiPrompt')
       },
       buttons: {
@@ -30,7 +31,8 @@ class PopupView {
         export: document.getElementById('exportBtn'),
         import: document.getElementById('importBtn'),
         selectMode: document.getElementById('btnSelectMode'),
-        diagnostic: document.getElementById('btnDiagnostic')
+        diagnostic: document.getElementById('btnDiagnostic'),
+        refreshModels: document.getElementById('refreshModelsBtn')
       },
       stats: {
         total: document.getElementById('totalLikes'),
@@ -49,6 +51,7 @@ class PopupView {
         blacklist: document.getElementById('blacklistCount')
       },
       status: document.getElementById('status'),
+      modelStatus: document.getElementById('aiModelStatus'),
       // Sélection de tous les onglets
       tabs: document.querySelectorAll('.tab'),
       tabContents: document.querySelectorAll('.tab-content')
@@ -71,9 +74,48 @@ class PopupView {
     if (aiConfig) {
       this.dom.inputs.aiEnable.checked = aiConfig.isEnabled;
       this.dom.inputs.aiApiKey.value = aiConfig.apiKey || ''; // On affiche la clé (masquée par input type=password)
-      this.dom.inputs.aiModel.value = aiConfig.model || '';
       this.dom.inputs.aiPrompt.value = aiConfig.systemPrompt || '';
     }
+  }
+
+  setModelOptions(models, selectedModel, defaultModel) {
+    const select = this.dom.inputs.aiModel;
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    if (!models.length) {
+      const fallbackValue = selectedModel || defaultModel || '';
+      const option = document.createElement('option');
+      option.value = fallbackValue;
+      option.textContent = fallbackValue || 'Aucun modèle disponible';
+      select.appendChild(option);
+      select.value = fallbackValue;
+      return;
+    }
+
+    models.forEach((model) => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      const latencyText = Number.isFinite(model.latencyMs) ? ` • ${Math.round(model.latencyMs)}ms` : '';
+      option.textContent = `${model.id}${latencyText}`;
+      select.appendChild(option);
+    });
+
+    select.value = selectedModel || defaultModel || models[0].id;
+  }
+
+  setModelStatus(text, type = 'info') {
+    if (!this.dom.modelStatus) return;
+    this.dom.modelStatus.textContent = text;
+    this.dom.modelStatus.dataset.type = type;
+  }
+
+  setModelLoading(isLoading) {
+    if (!this.dom.buttons.refreshModels || !this.dom.inputs.aiModel) return;
+    this.dom.buttons.refreshModels.disabled = isLoading;
+    this.dom.inputs.aiModel.disabled = isLoading;
+    this.dom.buttons.refreshModels.textContent = isLoading ? 'Chargement…' : '↻ Actualiser';
   }
 
   getFormValues() {
@@ -246,7 +288,10 @@ class PopupView {
 class PopupController {
   constructor() {
     this.storage = new StorageService();
+    this.modelsService = new OpenRouterModelsService();
     this.view = new PopupView();
+    this.modelList = [];
+    this.currentAIConfig = null;
     this._bindEvents();
   }
 
@@ -254,6 +299,7 @@ class PopupController {
     try {
       await this.storage.init();
       await this.refreshAll();
+      await this._refreshModels();
 
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local') this.refreshAll();
@@ -272,11 +318,16 @@ class PopupController {
       this.storage.getHistory()
     ]);
 
+    this.currentAIConfig = aiConfig;
     this.view.setConfigValues(config, aiConfig);
     this.view.updateStats(stats);
     this.view.renderHistory(history);
     this.view.renderList('whitelist', config.whitelist, (n) => this._removeItem('whitelist', n));
     this.view.renderList('blacklist', config.blacklist, (n) => this._removeItem('blacklist', n));
+
+    if (this.modelList.length) {
+      this.view.setModelOptions(this.modelList, aiConfig.model, this.modelList[0]?.id);
+    }
   }
 
   _bindEvents() {
@@ -290,6 +341,7 @@ class PopupController {
     btns.export.onclick = () => this._handleExport();
     btns.selectMode.onclick = () => this._handleSelectMode();
     btns.diagnostic.onclick = () => this._handleDiagnostic();
+    btns.refreshModels.onclick = () => this._refreshModels(true);
 
     btns.import.onclick = () => inputs.file.click();
     inputs.file.onchange = (e) => this._handleImport(e);
@@ -341,6 +393,39 @@ class PopupController {
     } catch (error) {
       console.error(error);
       this.view.showStatus('Erreur sauvegarde', 'error');
+    }
+  }
+
+  async _refreshModels(userInitiated = false) {
+    try {
+      this.view.setModelLoading(true);
+
+      const models = await this.modelsService.listFreeModels();
+      this.modelList = models;
+
+      const defaultModel = models[0]?.id || '';
+      const storedModel = this.currentAIConfig?.model || '';
+      const isStoredAvailable = models.some((model) => model.id === storedModel);
+      const selectedModel = isStoredAvailable ? storedModel : defaultModel || storedModel;
+
+      this.view.setModelOptions(models, selectedModel, defaultModel);
+
+      const statusText = models.length
+        ? `Triés par latence • ${models.length} modèles • Défaut: ${defaultModel || '—'}`
+        : 'Aucun modèle :free détecté.';
+
+      this.view.setModelStatus(statusText, models.length ? 'info' : 'warning');
+      if (userInitiated) {
+        this.view.showStatus('Liste des modèles mise à jour', 'success');
+      }
+    } catch (error) {
+      console.error(error);
+      this.view.setModelStatus('Impossible de récupérer les modèles OpenRouter.', 'error');
+      if (userInitiated) {
+        this.view.showStatus('Erreur récupération modèles', 'error');
+      }
+    } finally {
+      this.view.setModelLoading(false);
     }
   }
 

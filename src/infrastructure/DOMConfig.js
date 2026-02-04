@@ -19,6 +19,13 @@ export const DEFAULT_DOM_CONFIG = Object.freeze({
         LIKE_BUTTONS: [],
         DISLIKE_BUTTONS: [],
         CHANNEL_NAME: [],
+        CHANNEL_NAME_FALLBACK: [
+            'ytd-channel-name a',
+            '#channel-name a',
+            'ytd-video-owner-renderer a',
+            '#owner ytd-channel-name a',
+            '#owner #channel-name a'
+        ],
 
         // Système de commentaires (Standards YouTube Desktop)
         COMMENT_PLACEHOLDER: [

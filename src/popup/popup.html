@@ -87,9 +87,13 @@
         <div class="spacer"></div>
 
         <div class="control-group">
-          <label for="aiModel">Modèle (ID)</label>
-          <input type="text" id="aiModel" placeholder="google/gemini-..." style="width:180px; text-align:left; font-size:11px;">
+          <label for="aiModelSelect">Modèles :free</label>
+          <div class="model-row">
+            <select id="aiModelSelect"></select>
+            <button id="refreshModelsBtn" class="btn-secondary btn-compact" type="button">↻ Actualiser</button>
+          </div>
         </div>
+        <p id="aiModelStatus" class="helper-text"></p>
 
         <div class="spacer"></div>
 
