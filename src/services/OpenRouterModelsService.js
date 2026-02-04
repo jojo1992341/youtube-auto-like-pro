@@ -42,10 +42,18 @@ export class OpenRouterModelsService {
     const candidates = [
       model?.metrics?.latency?.p50,
       model?.metrics?.latency?.p95,
+      model?.metrics?.latency?.p90,
+      model?.metrics?.latency?.p99,
       model?.metrics?.latency,
+      model?.metrics?.latency_ms,
       model?.top_provider?.latency,
+      model?.top_provider?.latency_ms,
+      model?.top_provider?.metrics?.latency?.p50,
+      model?.top_provider?.metrics?.latency?.p95,
       model?.performance?.latency,
-      model?.latency
+      model?.latency,
+      model?.latency_ms,
+      ...this._extractProviderLatencies(model)
     ];
 
     for (const value of candidates) {
@@ -56,5 +64,19 @@ export class OpenRouterModelsService {
     }
 
     return null;
+  }
+
+  _extractProviderLatencies(model) {
+    const providers = Array.isArray(model?.providers) ? model.providers : [];
+    if (!providers.length) return [];
+
+    return providers.flatMap((provider) => ([
+      provider?.latency,
+      provider?.latency_ms,
+      provider?.metrics?.latency?.p50,
+      provider?.metrics?.latency?.p95,
+      provider?.metrics?.latency,
+      provider?.performance?.latency
+    ]));
   }
 }
