@@ -127,6 +127,12 @@ button {
   color: var(--text-main); border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
 }
 .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+.btn-compact {
+  padding: 6px 10px;
+  font-size: 11px;
+  flex: unset;
+  white-space: nowrap;
+}
 
 .btn-text { background: none; color: var(--text-light); font-size: 11px; padding: 4px; }
 .btn-text:hover { color: var(--error); text-decoration: underline; }
@@ -188,6 +194,31 @@ button {
 .list-item:hover { border-color: var(--border); }
 .list-item-name {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; font-weight: 500;
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-row select {
+  width: 210px;
+  text-align: left;
+}
+
+.helper-text {
+  margin-top: -6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.helper-text[data-type="warning"] {
+  color: var(--warning);
+}
+
+.helper-text[data-type="error"] {
+  color: var(--error);
 }
 
 .history-item { flex-direction: column; align-items: flex-start; gap: 4px; }
