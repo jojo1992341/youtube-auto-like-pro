@@ -3,7 +3,7 @@ import { logger } from '../infrastructure/logger.js';
 
 export class OpenRouterModelsService {
   constructor(fetchImpl = fetch) {
-    this.fetch = fetchImpl;
+    this.fetch = (...args) => fetchImpl(...args);
   }
 
   async listFreeModels() {
