@@ -127,6 +127,12 @@ button {
   color: var(--text-main); border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
 }
 .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+.btn-compact {
+  padding: 6px 10px;
+  font-size: 11px;
+  flex: unset;
+  white-space: nowrap;
+}
 
 .btn-text { background: none; color: var(--text-light); font-size: 11px; padding: 4px; }
 .btn-text:hover { color: var(--error); text-decoration: underline; }
@@ -188,6 +194,71 @@ button {
 .list-item:hover { border-color: var(--border); }
 .list-item-name {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; font-weight: 500;
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-row select {
+  width: 210px;
+  text-align: left;
+}
+
+.provider-select {
+  width: 140px;
+  text-align: left;
+}
+
+.key-block {
+  background: var(--bg-elevated);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: none;
+}
+
+.key-block.active {
+  display: block;
+}
+
+.key-block label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.key-input {
+  width: 100%;
+  text-align: left;
+  font-family: monospace;
+  margin-bottom: 4px;
+}
+
+.key-link {
+  text-align: right;
+}
+
+.key-link a {
+  font-size: 11px;
+  color: var(--info);
+  text-decoration: none;
+}
+
+.helper-text {
+  margin-top: -6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.helper-text[data-type="warning"] {
+  color: var(--warning);
+}
+
+.helper-text[data-type="error"] {
+  color: var(--error);
 }
 
 .history-item { flex-direction: column; align-items: flex-start; gap: 4px; }

@@ -49,7 +49,9 @@ export const DEFAULTS = Object.freeze({
   AI_CONFIG: {
     isEnabled: false, // Sécurité par défaut : désactivé
     provider: 'openrouter',
-    apiKey: '', // L'utilisateur DOIT fournir sa clé
+    apiKey: '', // Legacy: compat OpenRouter
+    openrouterApiKey: '',
+    groqApiKey: '',
     // Modèle gratuit performant par défaut sur OpenRouter
     model: 'google/gemma-3-27b-it:free',
     // Prompt système par défaut : concis, positif, engageant
@@ -90,5 +92,9 @@ export const AI_PROVIDERS = Object.freeze({
     BASE_URL: 'https://openrouter.ai/api/v1',
     HEADERS_REFERER: 'https://github.com/autolike-pro', // Requis par OpenRouter
     HEADERS_TITLE: 'YouTube AutoLike Pro' // Requis par OpenRouter
+  },
+  GROQ: {
+    NAME: 'Groq',
+    BASE_URL: 'https://api.groq.com/openai/v1'
   }
 });

@@ -79,16 +79,21 @@ export class YouTubeDOMAdapter {
 
   async getChannelName(customSelector = null) {
     const element = await this.getChannelElement(customSelector);
-    return element?.textContent?.trim() || null;
+    return this._extractChannelName(element);
   }
 
   async getChannelElement(customSelector = null) {
     const selectors = this._mergeSelectors(customSelector, this.config.SELECTORS.CHANNEL_NAME);
 
     try {
-      return await this._waitForElement(selectors, this.config.TIMEOUTS.ELEMENT_SEARCH);
+      const element = await this._waitForElement(selectors, this.config.TIMEOUTS.ELEMENT_SEARCH);
+      if (this._isChannelNameValid(this._extractChannelName(element))) {
+        return element;
+      }
+
+      return await this._getFallbackChannelElement();
     } catch (e) {
-      return null;
+      return await this._getFallbackChannelElement();
     }
   }
 
@@ -204,6 +209,22 @@ export class YouTubeDOMAdapter {
 
   _mergeSelectors(custom, defaults) {
     return custom ? [custom, ...defaults] : defaults;
+  }
+
+  _extractChannelName(element) {
+    return element?.textContent?.trim() || null;
+  }
+
+  _isChannelNameValid(name) {
+    if (!name) return false;
+    return !name.trim().startsWith('#');
+  }
+
+  async _getFallbackChannelElement() {
+    const fallbackSelectors = this.config.SELECTORS.CHANNEL_NAME_FALLBACK || [];
+    if (!fallbackSelectors.length) return null;
+
+    return this._waitForElement(fallbackSelectors, 2000).catch(() => null);
   }
 
   _isButtonPressed(btn) {

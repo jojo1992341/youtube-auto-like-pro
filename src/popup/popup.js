@@ -1,5 +1,7 @@
 import { StorageService } from '../services/StorageService.js';
 import { LIMITS, DEFAULTS, MESSAGES } from '../core/Constants.js';
+import { OpenRouterModelsService } from '../services/OpenRouterModelsService.js';
+import { GroqModelsService } from '../services/GroqModelsService.js';
 
 /**
  * VUE (VIEW)
@@ -18,8 +20,10 @@ class PopupView {
         file: document.getElementById('importInput'),
         // Config IA (Nouveau)
         aiEnable: document.getElementById('aiEnableCheck'),
-        aiApiKey: document.getElementById('aiApiKey'),
-        aiModel: document.getElementById('aiModel'),
+        aiProvider: document.getElementById('aiProvider'),
+        openrouterApiKey: document.getElementById('openrouterApiKey'),
+        groqApiKey: document.getElementById('groqApiKey'),
+        aiModel: document.getElementById('aiModelSelect'),
         aiPrompt: document.getElementById('aiPrompt')
       },
       buttons: {
@@ -30,7 +34,8 @@ class PopupView {
         export: document.getElementById('exportBtn'),
         import: document.getElementById('importBtn'),
         selectMode: document.getElementById('btnSelectMode'),
-        diagnostic: document.getElementById('btnDiagnostic')
+        diagnostic: document.getElementById('btnDiagnostic'),
+        refreshModels: document.getElementById('refreshModelsBtn')
       },
       stats: {
         total: document.getElementById('totalLikes'),
@@ -49,6 +54,11 @@ class PopupView {
         blacklist: document.getElementById('blacklistCount')
       },
       status: document.getElementById('status'),
+      modelStatus: document.getElementById('aiModelStatus'),
+      keyBlocks: {
+        openrouter: document.getElementById('openrouterKeyBlock'),
+        groq: document.getElementById('groqKeyBlock')
+      },
       // Sélection de tous les onglets
       tabs: document.querySelectorAll('.tab'),
       tabContents: document.querySelectorAll('.tab-content')
@@ -70,10 +80,60 @@ class PopupView {
     // Config IA
     if (aiConfig) {
       this.dom.inputs.aiEnable.checked = aiConfig.isEnabled;
-      this.dom.inputs.aiApiKey.value = aiConfig.apiKey || ''; // On affiche la clé (masquée par input type=password)
-      this.dom.inputs.aiModel.value = aiConfig.model || '';
+      this.dom.inputs.aiProvider.value = aiConfig.provider || 'openrouter';
+      this.dom.inputs.openrouterApiKey.value = aiConfig.openrouterApiKey || aiConfig.apiKey || '';
+      this.dom.inputs.groqApiKey.value = aiConfig.groqApiKey || '';
       this.dom.inputs.aiPrompt.value = aiConfig.systemPrompt || '';
+      this.toggleProviderUI(this.dom.inputs.aiProvider.value);
     }
+  }
+
+  toggleProviderUI(provider) {
+    const normalized = provider || 'openrouter';
+    Object.entries(this.dom.keyBlocks).forEach(([key, block]) => {
+      if (!block) return;
+      block.classList.toggle('active', key === normalized);
+    });
+  }
+
+  setModelOptions(models, selectedModel, defaultModel) {
+    const select = this.dom.inputs.aiModel;
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    if (!models.length) {
+      const fallbackValue = selectedModel || defaultModel || '';
+      const option = document.createElement('option');
+      option.value = fallbackValue;
+      option.textContent = fallbackValue || 'Aucun modèle disponible';
+      select.appendChild(option);
+      select.value = fallbackValue;
+      return;
+    }
+
+    models.forEach((model) => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      const latencyText = Number.isFinite(model.latencyMs) ? ` • ${Math.round(model.latencyMs)}ms` : '';
+      option.textContent = `${model.id}${latencyText}`;
+      select.appendChild(option);
+    });
+
+    select.value = selectedModel || defaultModel || models[0].id;
+  }
+
+  setModelStatus(text, type = 'info') {
+    if (!this.dom.modelStatus) return;
+    this.dom.modelStatus.textContent = text;
+    this.dom.modelStatus.dataset.type = type;
+  }
+
+  setModelLoading(isLoading) {
+    if (!this.dom.buttons.refreshModels || !this.dom.inputs.aiModel) return;
+    this.dom.buttons.refreshModels.disabled = isLoading;
+    this.dom.inputs.aiModel.disabled = isLoading;
+    this.dom.buttons.refreshModels.textContent = isLoading ? 'Chargement…' : '↻ Actualiser';
   }
 
   getFormValues() {
@@ -86,7 +146,9 @@ class PopupView {
       },
       aiConfig: {
         isEnabled: this.dom.inputs.aiEnable.checked,
-        apiKey: this.dom.inputs.aiApiKey.value.trim(),
+        provider: this.dom.inputs.aiProvider.value,
+        openrouterApiKey: this.dom.inputs.openrouterApiKey.value.trim(),
+        groqApiKey: this.dom.inputs.groqApiKey.value.trim(),
         model: this.dom.inputs.aiModel.value.trim(),
         systemPrompt: this.dom.inputs.aiPrompt.value.trim()
       }
@@ -246,7 +308,11 @@ class PopupView {
 class PopupController {
   constructor() {
     this.storage = new StorageService();
+    this.modelsService = new OpenRouterModelsService();
+    this.groqModelsService = new GroqModelsService();
     this.view = new PopupView();
+    this.modelList = [];
+    this.currentAIConfig = null;
     this._bindEvents();
   }
 
@@ -254,6 +320,7 @@ class PopupController {
     try {
       await this.storage.init();
       await this.refreshAll();
+      await this._refreshModels();
 
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local') this.refreshAll();
@@ -272,11 +339,16 @@ class PopupController {
       this.storage.getHistory()
     ]);
 
+    this.currentAIConfig = aiConfig;
     this.view.setConfigValues(config, aiConfig);
     this.view.updateStats(stats);
     this.view.renderHistory(history);
     this.view.renderList('whitelist', config.whitelist, (n) => this._removeItem('whitelist', n));
     this.view.renderList('blacklist', config.blacklist, (n) => this._removeItem('blacklist', n));
+
+    if (this.modelList.length) {
+      this.view.setModelOptions(this.modelList, aiConfig.model, this.modelList[0]?.id);
+    }
   }
 
   _bindEvents() {
@@ -290,6 +362,10 @@ class PopupController {
     btns.export.onclick = () => this._handleExport();
     btns.selectMode.onclick = () => this._handleSelectMode();
     btns.diagnostic.onclick = () => this._handleDiagnostic();
+    btns.refreshModels.onclick = () => this._refreshModels(true);
+    inputs.aiProvider.onchange = () => this._handleProviderChange();
+    inputs.openrouterApiKey.onchange = () => this._refreshModels(true);
+    inputs.groqApiKey.onchange = () => this._refreshModels(true);
 
     btns.import.onclick = () => inputs.file.click();
     inputs.file.onchange = (e) => this._handleImport(e);
@@ -328,7 +404,10 @@ class PopupController {
       // Sauvegarde Config IA (Nouveau)
       await this.storage.updateAIConfig({
         isEnabled: aiConfig.isEnabled,
-        apiKey: aiConfig.apiKey,
+        provider: aiConfig.provider,
+        apiKey: aiConfig.openrouterApiKey || aiConfig.apiKey,
+        openrouterApiKey: aiConfig.openrouterApiKey,
+        groqApiKey: aiConfig.groqApiKey,
         model: aiConfig.model || DEFAULTS.AI_CONFIG.model,
         systemPrompt: aiConfig.systemPrompt || DEFAULTS.AI_CONFIG.systemPrompt
       });
@@ -342,6 +421,57 @@ class PopupController {
       console.error(error);
       this.view.showStatus('Erreur sauvegarde', 'error');
     }
+  }
+
+  async _refreshModels(userInitiated = false) {
+    try {
+      this.view.setModelLoading(true);
+      const provider = this.view.dom.inputs.aiProvider.value || 'openrouter';
+
+      if (provider === 'groq' && !this.view.dom.inputs.groqApiKey.value.trim()) {
+        this.modelList = [];
+        this.view.setModelOptions([], '', '');
+        this.view.setModelStatus('Ajoutez une clé Groq pour lister les modèles.', 'warning');
+        return;
+      }
+
+      const models = provider === 'groq'
+        ? await this.groqModelsService.listModels(this.view.dom.inputs.groqApiKey.value.trim())
+        : await this.modelsService.listFreeModels();
+      this.modelList = models;
+
+      const defaultModel = models[0]?.id || '';
+      const storedModel = this.currentAIConfig?.model || '';
+      const isStoredAvailable = models.some((model) => model.id === storedModel);
+      const selectedModel = isStoredAvailable ? storedModel : defaultModel || storedModel;
+
+      this.view.setModelOptions(models, selectedModel, defaultModel);
+
+      const statusText = models.length
+        ? `${provider === 'groq' ? 'Triés par nom' : 'Triés par latence'} • ${models.length} modèles • Défaut: ${defaultModel || '—'}`
+        : provider === 'groq'
+          ? 'Aucun modèle Groq détecté.'
+          : 'Aucun modèle :free détecté.';
+
+      this.view.setModelStatus(statusText, models.length ? 'info' : 'warning');
+      if (userInitiated) {
+        this.view.showStatus('Liste des modèles mise à jour', 'success');
+      }
+    } catch (error) {
+      console.error(error);
+      this.view.setModelStatus('Impossible de récupérer les modèles.', 'error');
+      if (userInitiated) {
+        this.view.showStatus('Erreur récupération modèles', 'error');
+      }
+    } finally {
+      this.view.setModelLoading(false);
+    }
+  }
+
+  _handleProviderChange() {
+    const provider = this.view.dom.inputs.aiProvider.value || 'openrouter';
+    this.view.toggleProviderUI(provider);
+    this._refreshModels(true);
   }
 
   // ... (Méthodes _handleResetStats, _removeItem, _handleClearList inchangées, on garde le code existant mais non répété pour brièveté si elles sont identiques à la V5.2. Je les réinclus pour être complet)
