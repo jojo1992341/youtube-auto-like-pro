@@ -205,11 +205,20 @@ class InteractionExecutor {
 
   _getCaptionTrack() {
     if (typeof window === 'undefined') return null;
-    const playerResponse = window.ytInitialPlayerResponse;
-    const trackList = playerResponse?.captions?.playerCaptionsTracklistRenderer;
-    const captionTracks = trackList?.captionTracks;
+    const playerResponse = window.ytInitialPlayerResponse
+      || (window.ytplayer?.config?.args?.player_response
+        ? JSON.parse(window.ytplayer.config.args.player_response)
+        : null);
+
+    const captionTracks = playerResponse
+      ?.captions
+      ?.playerCaptionsTracklistRenderer
+      ?.captionTracks;
+
     if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
-    return captionTracks[0];
+
+    const frTrack = captionTracks.find((track) => track.languageCode?.startsWith('fr'));
+    return frTrack || captionTracks[0];
   }
 
   async _attemptLike(videoId, channelName, config) {
