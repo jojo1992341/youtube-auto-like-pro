@@ -22,7 +22,7 @@ export class OpenRouterService {
    * @param {string} params.channelName - Le nom de la chaîne
    * @returns {Promise<string[]>} Un tableau de 5 suggestions de commentaires
    */
-  async generateComment({ apiKey, model, systemPrompt, videoTitle, channelName }) {
+  async generateComment({ apiKey, model, systemPrompt, videoTitle, channelName, extraInstructions = '' }) {
     // 1. Validation défensive
     if (!apiKey) {
       throw new Error('Clé API manquante. Configurez-la dans les options.');
@@ -37,7 +37,9 @@ export class OpenRouterService {
       Contexte :
       - Chaîne : "${channelName}"
       - Vidéo : "${videoTitle}"
-      
+
+      ${extraInstructions ? `Précisions additionnelles : "${extraInstructions}"` : ''}
+
       Tâche : Rédige 5 variantes distinctes de commentaires (courts, positifs, pertinents).
       
       FORMAT DE RÉPONSE OBLIGATOIRE :

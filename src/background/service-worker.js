@@ -80,7 +80,8 @@ class BackgroundController {
         model: aiConfig.model,
         systemPrompt: aiConfig.systemPrompt,
         videoTitle: payload.videoTitle,
-        channelName: payload.channelName
+        channelName: payload.channelName,
+        extraInstructions: payload.extraInstructions
       });
 
       // 4. Réponse succès

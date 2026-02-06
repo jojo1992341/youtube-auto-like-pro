@@ -107,57 +107,70 @@ class InteractionExecutor {
     this.overlay.showToast('🤖 L\'IA prépare 5 variantes...', 'info', 2000);
 
     try {
-      // 2. Génération (via Background)
       const videoTitle = rawTitle.replace(' - YouTube', '');
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.AI_GENERATE_REQUEST,
-        payload: { videoTitle, channelName }
-      });
+      let extraInstructions = '';
 
-      if (checkCancel()) return;
+      while (true) {
+        // 2. Génération (via Background)
+        const response = await chrome.runtime.sendMessage({
+          type: MESSAGES.AI_GENERATE_REQUEST,
+          payload: { videoTitle, channelName, extraInstructions }
+        });
 
-      if (!response || response.type === MESSAGES.AI_GENERATE_ERROR) {
-        throw new Error(response?.error || 'Erreur inconnue');
-      }
+        if (checkCancel()) return;
 
-      // On reçoit un tableau de suggestions
-      const suggestions = response.data;
+        if (!response || response.type === MESSAGES.AI_GENERATE_ERROR) {
+          throw new Error(response?.error || 'Erreur inconnue');
+        }
 
-      // 3. Validation Humaine (Obligatoire avec sélection)
-      const { confirmed, finalComment } = await this.overlay.askCommentValidation(channelName, suggestions);
+        // On reçoit un tableau de suggestions
+        const suggestions = response.data;
 
-      if (!confirmed || !finalComment) {
-        this.overlay.showToast('Commentaire annulé', 'info');
+        // 3. Validation Humaine (Obligatoire avec sélection)
+        const { confirmed, finalComment, regenerate, extraInstructions: nextInstructions } =
+          await this.overlay.askCommentValidation(channelName, suggestions);
+
+        if (regenerate) {
+          extraInstructions = nextInstructions || '';
+          this.overlay.showToast('♻️ Nouvelles suggestions en cours...', 'info', 2000);
+          if (checkCancel()) return;
+          continue;
+        }
+
+        if (!confirmed || !finalComment) {
+          this.overlay.showToast('Commentaire annulé', 'info');
+          return;
+        }
+
+        if (checkCancel()) return;
+
+        // 4. Injection & Post
+        this.overlay.showToast('Préparation de la zone de commentaire...', 'info');
+
+        // Extraction des sélecteurs personnalisés pour les commentaires
+        const cs = config.customSelectors || {};
+
+        const inputField = await this.adapter.prepareCommentInput({
+          placeholder: cs.commentPlaceholder,
+          input: cs.commentInput
+        });
+
+        this.adapter.fillCommentInput(inputField, finalComment);
+
+        await delay(600); // Temps pour que l'UI YouTube réagisse à l'input
+
+        const submitBtn = await this.adapter.getSubmitCommentButton(cs.commentSubmitButton);
+
+        if (submitBtn) {
+          submitBtn.click();
+          this.overlay.showToast('Commentaire posté avec succès ! 🎉', 'success');
+          logger.info('✅ Commentaire IA posté.');
+        } else {
+          throw new Error('Bouton "Poster" introuvable ou inactif.');
+        }
+
         return;
       }
-
-      if (checkCancel()) return;
-
-      // 4. Injection & Post
-      this.overlay.showToast('Préparation de la zone de commentaire...', 'info');
-      
-      // Extraction des sélecteurs personnalisés pour les commentaires
-      const cs = config.customSelectors || {};
-
-      const inputField = await this.adapter.prepareCommentInput({
-        placeholder: cs.commentPlaceholder,
-        input: cs.commentInput
-      });
-
-      this.adapter.fillCommentInput(inputField, finalComment);
-      
-      await delay(600); // Temps pour que l'UI YouTube réagisse à l'input
-      
-      const submitBtn = await this.adapter.getSubmitCommentButton(cs.commentSubmitButton);
-      
-      if (submitBtn) {
-        submitBtn.click();
-        this.overlay.showToast('Commentaire posté avec succès ! 🎉', 'success');
-        logger.info('✅ Commentaire IA posté.');
-      } else {
-        throw new Error('Bouton "Poster" introuvable ou inactif.');
-      }
-
     } catch (error) {
       logger.error('Flux IA échoué', error);
       this.overlay.showToast(`Erreur IA: ${error.message}`, 'error');

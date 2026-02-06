@@ -93,7 +93,7 @@ export class ModalSystem {
         return new Promise((resolve) => {
             if (this.activeModal) {
                 logger.warn('Une modale est déjà active (Commentaire ignoré).');
-                return resolve({ confirmed: false, finalComment: '' });
+                return resolve({ confirmed: false, finalComment: '', regenerate: false, extraInstructions: '' });
             }
 
             // Normalisation : on s'assure d'avoir un tableau
@@ -164,24 +164,42 @@ export class ModalSystem {
 
             optionsDiv.append(listContainer, textarea);
 
+            // 3. Zone pour préciser une régénération
+            const regenerateBox = h('div', 'regenerate-box');
+            const regenerateLabel = h('label', 'popup-label', 'Précisions pour de nouvelles suggestions');
+            const regenerateInput = h('textarea', 'regenerate-input', '', {
+                rows: '2',
+                placeholder: 'Ex: plus court, ton humoristique, mentionner le tuto...'
+            });
+            regenerateBox.append(regenerateLabel, regenerateInput);
+            optionsDiv.append(regenerateBox);
+
             // Actions
             const actionsDiv = h('div', 'popup-actions');
+            const btnRegenerate = h('button', 'btn btn-secondary', 'Nouvelles suggestions');
             const btnCancel = h('button', 'btn btn-deny', 'Annuler');
             const btnPost = h('button', 'btn btn-confirm', 'Poster 🚀');
 
-            actionsDiv.append(btnCancel, btnPost);
+            actionsDiv.append(btnRegenerate, btnCancel, btnPost);
             card.append(title, text, optionsDiv, actionsDiv);
             overlay.appendChild(card);
             
             this.root.appendChild(overlay);
             this.activeModal = overlay;
 
-            const close = (confirmed) => {
+            const close = (confirmed, regenerate = false) => {
                 const finalComment = textarea.value.trim();
-                this._animateClose(overlay, card, () => resolve({ confirmed, finalComment }));
+                const extraInstructions = regenerateInput.value.trim();
+                this._animateClose(overlay, card, () => resolve({
+                    confirmed,
+                    finalComment,
+                    regenerate,
+                    extraInstructions
+                }));
             };
 
             btnPost.onclick = () => close(true);
+            btnRegenerate.onclick = () => close(false, true);
             btnCancel.onclick = () => close(false);
             overlay.onclick = (e) => { if (e.target === overlay) close(false); };
             
