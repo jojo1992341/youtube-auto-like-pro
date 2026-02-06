@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoLike Pro</title>
+  <link rel="stylesheet" href="../../assets/styles/popup.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>👍 AutoLike Pro</h1>
+    <div class="version">v5.3.0 (AI Edition)</div>
+  </header>
+
+  <main>
+
+    <section>
+      <div class="section-header">
+        <span>⚙️ Réglages</span>
+      </div>
+
+      <div class="tabs" style="margin-bottom: 16px;">
+        <div class="tab active" data-tab="general">Général</div>
+        <div class="tab" data-tab="ai">🤖 IA</div>
+      </div>
+
+      <div id="tab-general" class="tab-content active">
+        <div class="control-group">
+          <label for="enableCheck">Extension active</label>
+          <input type="checkbox" id="enableCheck">
+        </div>
+
+        <div class="control-group">
+          <label for="delayInput">Délai (secondes)</label>
+          <input type="number" id="delayInput" min="0" max="600">
+        </div>
+
+        <div class="control-group">
+          <label for="variationInput">Variation (%)</label>
+          <input type="number" id="variationInput" min="0" max="100">
+        </div>
+
+        <div class="control-group">
+          <label for="logLevel">Niveau de logs</label>
+          <select id="logLevel">
+            <option value="ERROR">Erreurs</option>
+            <option value="WARN">Warnings</option>
+            <option value="INFO">Infos</option>
+            <option value="DEBUG">Debug</option>
+          </select>
+        </div>
+
+        <div class="control-group" style="border-top: 1px dashed #eee; padding-top: 12px; margin-top: 12px;">
+          <label style="color: #d35400;">Problème de détection ?</label>
+          <div style="display: flex; gap: 8px;">
+            <button id="btnDiagnostic" class="btn-secondary"
+              style="margin-top: 4px; border-color: #2980b9; color: #2980b9; flex: 1;">
+              🔎 Vérifier
+            </button>
+            <button id="btnSelectMode" class="btn-secondary"
+              style="margin-top: 4px; border-color: #d35400; color: #d35400; flex: 1;">
+              🎯 Réparer
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-ai" class="tab-content">
+        <div class="control-group">
+          <label for="aiEnableCheck" style="font-weight: 700; color: var(--primary);">Activer l'Assistant</label>
+          <input type="checkbox" id="aiEnableCheck">
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="control-group">
+          <label for="aiProvider">Fournisseur IA</label>
+          <select id="aiProvider" class="provider-select">
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+          </select>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div id="openrouterKeyBlock" class="key-block">
+          <label for="openrouterApiKey">Clé API OpenRouter</label>
+          <input type="password" id="openrouterApiKey" placeholder="sk-or-..." class="key-input">
+          <div class="key-link">
+            <a href="https://openrouter.ai/keys" target="_blank">Obtenir une clé gratuite ↗</a>
+          </div>
+        </div>
+
+        <div id="groqKeyBlock" class="key-block">
+          <label for="groqApiKey">Clé API Groq</label>
+          <input type="password" id="groqApiKey" placeholder="gsk_..." class="key-input">
+          <div class="key-link">
+            <a href="https://console.groq.com/keys" target="_blank">Créer une clé Groq ↗</a>
+          </div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="control-group">
+          <label for="aiModelSelect">Modèles</label>
+          <div class="model-row">
+            <select id="aiModelSelect"></select>
+            <button id="refreshModelsBtn" class="btn-secondary btn-compact" type="button">↻ Actualiser</button>
+          </div>
+        </div>
+        <p id="aiModelStatus" class="helper-text"></p>
+
+        <div class="spacer"></div>
+
+        <label for="aiPrompt" style="display:block; margin-bottom:4px; font-size:12px; font-weight:600;">Personnalité (Prompt Système)</label>
+        <textarea id="aiPrompt" rows="3" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg-input); font-family:inherit; font-size:12px; resize:vertical;"></textarea>
+        <p style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">L'IA utilisera ce ton pour rédiger les commentaires.</p>
+      </div>
+
+      <div class="control-group buttons-row" style="margin-top: 16px; border-top: 1px solid var(--bg-elevated); padding-top: 12px;">
+        <button id="exportBtn" class="btn-secondary">⬇️ Exporter</button>
+        <button id="importBtn" class="btn-secondary">⬆️ Importer</button>
+        <input type="file" id="importInput" accept=".json">
+      </div>
+
+      <button id="saveBtn">Sauvegarder les modifications</button>
+    </section>
+
+    <section>
+      <div class="section-header">
+        <span>📊 Statistiques</span>
+        <button id="resetStatsBtn" class="btn-icon" title="Réinitialiser">↻</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div id="totalLikes" class="stat-value">-</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-box">
+          <div id="autoLikes" class="stat-value">-</div>
+          <div class="stat-label">Auto</div>
+        </div>
+        <div class="stat-box">
+          <div id="manualLikes" class="stat-value">-</div>
+          <div class="stat-label">Manuel</div>
+        </div>
+        <div class="stat-box">
+          <div id="skipped" class="stat-value">-</div>
+          <div class="stat-label">Ignorés</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">📈 Graphique</div>
+        <div class="tab" data-tab="history">🕐 Historique</div>
+      </div>
+
+      <div id="tab-overview" class="tab-content active">
+        <div class="chart-wrapper">
+          <canvas id="likesChart"></canvas>
+        </div>
+      </div>
+
+      <div id="tab-history" class="tab-content">
+        <div id="historyContainer" class="list-container">
+          </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-header">
+        <span>⭐ Favoris <span id="whitelistCount" class="badge">0</span></span>
+        <button id="clearWhitelistBtn" class="btn-text">Vider</button>
+      </div>
+      <div id="whitelistContainer" class="list-container short"></div>
+
+      <div class="spacer"></div>
+
+      <div class="section-header">
+        <span>🚫 Bloqués <span id="blacklistCount" class="badge">0</span></span>
+        <button id="clearBlacklistBtn" class="btn-text">Vider</button>
+      </div>
+      <div id="blacklistContainer" class="list-container short"></div>
+    </section>
+
+  </main>
+
+  <div id="status"></div>
+
+  <script src="../../libs/chart.min.js"></script>
+  <script src="popup.js" type="module"></script>
+</body>
+
+</html>
