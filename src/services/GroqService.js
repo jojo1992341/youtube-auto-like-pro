@@ -6,7 +6,7 @@ import { logger } from '../infrastructure/logger.js';
  * Responsabilité : Gérer la communication avec l'API Groq (compatible OpenAI).
  */
 export class GroqService {
-  async generateComment({ apiKey, model, systemPrompt, videoTitle, channelName, extraInstructions = '' }) {
+  async generateComment({ apiKey, model, systemPrompt, videoTitle, channelName, extraInstructions = '', transcript = '' }) {
     if (!apiKey) {
       throw new Error('Clé API Groq manquante. Configurez-la dans les options.');
     }
@@ -20,6 +20,7 @@ export class GroqService {
       - Vidéo : "${videoTitle}"
 
       ${extraInstructions ? `Précisions additionnelles : "${extraInstructions}"` : ''}
+      ${transcript ? `Transcription (extrait brut) : "${transcript}"` : ''}
 
       Tâche : Rédige 5 variantes distinctes de commentaires (courts, positifs, pertinents).
 

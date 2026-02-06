@@ -108,13 +108,14 @@ class InteractionExecutor {
 
     try {
       const videoTitle = rawTitle.replace(' - YouTube', '');
+      const transcript = await this._fetchTranscript();
       let extraInstructions = '';
 
       while (true) {
         // 2. Génération (via Background)
         const response = await chrome.runtime.sendMessage({
           type: MESSAGES.AI_GENERATE_REQUEST,
-          payload: { videoTitle, channelName, extraInstructions }
+          payload: { videoTitle, channelName, extraInstructions, transcript }
         });
 
         if (checkCancel()) return;
@@ -175,6 +176,40 @@ class InteractionExecutor {
       logger.error('Flux IA échoué', error);
       this.overlay.showToast(`Erreur IA: ${error.message}`, 'error');
     }
+  }
+
+  async _fetchTranscript() {
+    try {
+      const captionTrack = this._getCaptionTrack();
+      if (!captionTrack?.baseUrl) return '';
+
+      const response = await fetch(`${captionTrack.baseUrl}&fmt=srv3`);
+      if (!response.ok) return '';
+
+      const xmlText = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, 'text/xml');
+      const textNodes = Array.from(doc.getElementsByTagName('text'));
+
+      const transcript = textNodes
+        .map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' ');
+
+      return transcript.slice(0, 4000);
+    } catch (error) {
+      logger.warn('Transcript non disponible', error);
+      return '';
+    }
+  }
+
+  _getCaptionTrack() {
+    if (typeof window === 'undefined') return null;
+    const playerResponse = window.ytInitialPlayerResponse;
+    const trackList = playerResponse?.captions?.playerCaptionsTracklistRenderer;
+    const captionTracks = trackList?.captionTracks;
+    if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
+    return captionTracks[0];
   }
 
   async _attemptLike(videoId, channelName, config) {
