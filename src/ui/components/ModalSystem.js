@@ -137,6 +137,10 @@ export class ModalSystem {
                 resize: 'vertical',
                 minHeight: '60px'
             });
+            const suppressPlayerShortcuts = (event) => {
+                event.stopPropagation();
+            };
+            textarea.addEventListener('keydown', suppressPlayerShortcuts);
 
             // Génération des cartes
             safeSuggestions.forEach((suggestion, index) => {
@@ -171,6 +175,7 @@ export class ModalSystem {
                 rows: '2',
                 placeholder: 'Ex: plus court, ton humoristique, mentionner le tuto...'
             });
+            regenerateInput.addEventListener('keydown', suppressPlayerShortcuts);
             regenerateBox.append(regenerateLabel, regenerateInput);
             optionsDiv.append(regenerateBox);
 
