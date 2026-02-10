@@ -238,7 +238,7 @@ export class YouTubeDOMAdapter {
   _findFirstVisibleElement(selectorsList) {
     for (const selector of selectorsList) {
       try {
-        const candidates = document.querySelectorAll(selector);
+        const candidates = this._queryAllBySelector(selector);
         for (const el of candidates) {
           if (this._isVisible(el)) return el;
         }
@@ -248,6 +248,41 @@ export class YouTubeDOMAdapter {
       }
     }
     return null;
+  }
+
+  _queryAllBySelector(selector) {
+    if (!selector || typeof selector !== 'string') return [];
+
+    if (this._isXPath(selector)) {
+      return this._queryAllByXPath(selector);
+    }
+
+    return document.querySelectorAll(selector);
+  }
+
+  _isXPath(selector) {
+    const trimmed = selector.trim();
+    return trimmed.startsWith('/') || trimmed.startsWith('(');
+  }
+
+  _queryAllByXPath(xpath) {
+    const snapshot = document.evaluate(
+      xpath,
+      document,
+      null,
+      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+      null
+    );
+
+    const elements = [];
+    for (let i = 0; i < snapshot.snapshotLength; i += 1) {
+      const node = snapshot.snapshotItem(i);
+      if (node && node.nodeType === Node.ELEMENT_NODE) {
+        elements.push(node);
+      }
+    }
+
+    return elements;
   }
 
   _waitForElement(selectorsList, timeoutMs) {

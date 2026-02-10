@@ -29,42 +29,54 @@ export class SelectorGenerator {
     }
 
     /**
-     * Génère un sélecteur CSS unique pour l'élément donné.
+     * Génère un sélecteur XPath absolu (full XPath) pour l'élément donné.
      * @param {HTMLElement} element - L'élément cible.
-     * @returns {string} Le sélecteur CSS unique.
+     * @returns {string} Le sélecteur XPath absolu.
      */
     generate(element) {
-        if (!element) return '';
+        return this._buildFullXPath(element);
+    }
 
-        let path = [];
+    /**
+     * Construit un XPath absolu de type /html/body/div[2]/...
+     * @param {HTMLElement} element
+     * @returns {string}
+     */
+    _buildFullXPath(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) return '';
+
+        const segments = [];
         let current = element;
 
-        // Boucle de remontée vers la racine
-        while (current && current !== document.body.parentElement) {
-            // 1. Calculer l'identité locale de l'étape courante
-            const localSelector = this._getLocalSelector(current);
-            path.unshift(localSelector);
+        while (current && current.nodeType === Node.ELEMENT_NODE) {
+            const tagName = current.tagName.toLowerCase();
 
-            // 2. Tester l'unicité du chemin complet actuel
-            const fullSelector = path.join(' > '); // Liaison directe pour précision max
-            const matches = document.querySelectorAll(fullSelector);
-
-            if (matches.length === 1) {
-                // VICTOIRE : Le sélecteur est unique, on s'arrête là.
-                return fullSelector;
+            // L'élément racine html n'a pas besoin d'index
+            if (tagName === 'html') {
+                segments.unshift('html');
+                break;
             }
 
-            // Cas de sécurité : Si on est arrivé au body et que ce n'est toujours pas unique
-            if (current === document.body) {
-                // Impossible d'être unique structurellement
-                return this._forceNthIndex(element, path);
-            }
-
-            // Sinon, on continue de monter pour trouver un ancêtre discriminant
+            const index = this._getElementIndexAmongSameTag(current);
+            segments.unshift(`${tagName}[${index}]`);
             current = current.parentElement;
         }
 
-        return path.join(' > '); // Fallback
+        return `/${segments.join('/')}`;
+    }
+
+    _getElementIndexAmongSameTag(element) {
+        let index = 1;
+        let sibling = element.previousElementSibling;
+
+        while (sibling) {
+            if (sibling.tagName === element.tagName) {
+                index += 1;
+            }
+            sibling = sibling.previousElementSibling;
+        }
+
+        return index;
     }
 
     /**
