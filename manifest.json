@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Auto-Like Pro (v5)",
-  "version": "5.8.0",
+  "name": "YouTube Auto-Like Pro (v6)",
+  "version": "6.0.0",
   "description": "Architecture propre, modulaire et performante. Inclus Assistant IA.",
   "permissions": [
     "storage"
