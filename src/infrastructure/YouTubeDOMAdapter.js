@@ -236,18 +236,55 @@ export class YouTubeDOMAdapter {
   }
 
   _findFirstVisibleElement(selectorsList) {
+    let bestCandidate = null;
+    let bestScore = -1;
+
     for (const selector of selectorsList) {
       try {
         const candidates = this._queryAllBySelector(selector);
         for (const el of candidates) {
-          if (this._isVisible(el)) return el;
+          if (!this._isVisible(el)) continue;
+
+          const score = this._computeElementScore(el);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestCandidate = el;
+          }
+
+          // Score maximal atteint : on peut sortir rapidement
+          if (score >= 3) return el;
         }
       } catch (e) {
         // Ignorer sélecteurs invalides
         continue;
       }
     }
-    return null;
+
+    return bestCandidate;
+  }
+
+  _computeElementScore(el) {
+    let score = 0;
+
+    if (this._isInActiveWatchContext(el)) score += 2;
+    if (this._isInsideOwnerMetadata(el)) score += 1;
+
+    return score;
+  }
+
+  _isInActiveWatchContext(el) {
+    const watchRoot = el.closest('ytd-watch-flexy');
+    if (!watchRoot) return true;
+
+    if (watchRoot.hasAttribute('hidden')) return false;
+    if (watchRoot.getAttribute('aria-hidden') === 'true') return false;
+
+    return true;
+  }
+
+  _isInsideOwnerMetadata(el) {
+    return Boolean(el.closest('#owner, ytd-watch-metadata, ytd-video-owner-renderer'));
   }
 
   _queryAllBySelector(selector) {
