@@ -86,7 +86,12 @@ export class YouTubeDOMAdapter {
     const selectors = this._mergeSelectors(customSelector, this.config.SELECTORS.CHANNEL_NAME);
 
     try {
-      const element = await this._waitForElement(selectors, this.config.TIMEOUTS.ELEMENT_SEARCH);
+      const element = await this._waitForStableElement(
+        selectors,
+        this.config.TIMEOUTS.ELEMENT_SEARCH,
+        450
+      );
+
       if (this._isChannelNameValid(this._extractChannelName(element))) {
         return element;
       }
@@ -236,32 +241,9 @@ export class YouTubeDOMAdapter {
   }
 
   _findFirstVisibleElement(selectorsList) {
-    let bestCandidate = null;
-    let bestScore = -1;
-
-    for (const selector of selectorsList) {
-      try {
-        const candidates = this._queryAllBySelector(selector);
-        for (const el of candidates) {
-          if (!this._isVisible(el)) continue;
-
-          const score = this._computeElementScore(el);
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestCandidate = el;
-          }
-
-          // Score maximal atteint : on peut sortir rapidement
-          if (score >= 3) return el;
-        }
-      } catch (e) {
-        // Ignorer sélecteurs invalides
-        continue;
-      }
-    }
-
-    return bestCandidate;
+    const candidates = this._findAllVisibleElements(selectorsList);
+    if (!candidates.length) return null;
+    return this._selectBestElement(candidates);
   }
 
   _computeElementScore(el) {
@@ -350,6 +332,82 @@ export class YouTubeDOMAdapter {
         reject(new Error('Timeout searching element'));
       }, timeoutMs);
     });
+  }
+
+  async _waitForStableElement(selectorsList, timeoutMs, stableDelayMs = 400) {
+    const start = Date.now();
+    let lastSignature = null;
+    let lastChangeAt = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const candidates = this._findAllVisibleElements(selectorsList);
+      const signature = this._buildElementsSignature(candidates);
+
+      if (signature !== lastSignature) {
+        lastSignature = signature;
+        lastChangeAt = Date.now();
+      }
+
+      if (candidates.length > 0 && Date.now() - lastChangeAt >= stableDelayMs) {
+        return this._selectBestElement(candidates);
+      }
+
+      await this._delay(100);
+    }
+
+    throw new Error('Timeout searching stable element');
+  }
+
+  _findAllVisibleElements(selectorsList) {
+    const unique = new Set();
+
+    for (const selector of selectorsList) {
+      try {
+        const candidates = this._queryAllBySelector(selector);
+        for (const el of candidates) {
+          if (this._isVisible(el)) {
+            unique.add(el);
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    return [...unique];
+  }
+
+  _buildElementsSignature(elements) {
+    return elements
+      .map((el) => {
+        const name = this._extractChannelName(el) || '';
+        const score = this._computeElementScore(el);
+        return `${name}|${score}`;
+      })
+      .sort()
+      .join('||');
+  }
+
+  _selectBestElement(elements) {
+    let bestCandidate = null;
+    let bestScore = -1;
+
+    for (const el of elements) {
+      const score = this._computeElementScore(el);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = el;
+      }
+
+      if (score >= 3) return el;
+    }
+
+    return bestCandidate;
+  }
+
+  _delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   _isVisible(el) {
